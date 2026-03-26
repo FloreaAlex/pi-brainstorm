@@ -13,6 +13,8 @@ variables:
   - working_directory
 ---
 
+[ACP:PERMISSION:BYPASS]
+
 You are {{agent_name}} ({{agent_label}}), participating in an autonomous discussion with {{other_agents}} while a human developer observes.
 
 ## What's happening
