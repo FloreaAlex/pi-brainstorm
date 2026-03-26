@@ -12,10 +12,30 @@ import type {
 	InputEvent,
 	InputEventResult,
 } from "@mariozechner/pi-coding-agent";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import chalk from "chalk";
 import { Orchestrator, parseMentions } from "./orchestrator.js";
 import { BrainstormRenderer } from "./renderer.js";
 import { type AgentConfig, DEFAULT_AGENTS } from "./types.js";
+
+/** Persist brainstorm state to a file so it survives pi crashes. */
+function getStateFilePath(cwd: string): string {
+	const dir = join(cwd, ".pi", "brainstorm");
+	if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+	return join(dir, "state.json");
+}
+
+function saveState(cwd: string, state: ReturnType<Orchestrator["toJSON"]>): void {
+	try { writeFileSync(getStateFilePath(cwd), JSON.stringify(state, null, 2)); } catch {}
+}
+
+function loadState(cwd: string): ReturnType<Orchestrator["toJSON"]> | null {
+	try {
+		const raw = readFileSync(getStateFilePath(cwd), "utf-8");
+		return JSON.parse(raw);
+	} catch { return null; }
+}
 
 /** Custom entry type for session persistence. */
 const BRAINSTORM_ENTRY_TYPE = "brainstorm_state";
@@ -29,6 +49,7 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 	let unsubOrchestrator: (() => void) | null = null;
 	let unsubKeyHandler: (() => void) | null = null;
 	let sessionUi: ExtensionContext["ui"] | null = null;
+	let sessionCwd: string | null = null;
 	let spinnerInterval: NodeJS.Timeout | null = null;
 
 	// ── Helpers ──────────────────────────────────────────────────────────
@@ -58,6 +79,7 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 			return;
 		}
 		sessionUi = ctx.ui;
+		sessionCwd = ctx.cwd;
 
 		renderer = new BrainstormRenderer();
 		orchestrator = new Orchestrator(ctx.cwd);
@@ -140,6 +162,7 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 
 		// Persist state
 		api.appendEntry(BRAINSTORM_ENTRY_TYPE, orchestrator.toJSON());
+		saveState(ctx.cwd, orchestrator.toJSON());
 	}
 
 	async function stopSession(ctx: ExtensionContext): Promise<void> {
@@ -170,6 +193,7 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 
 		// Persist final state
 		api.appendEntry(BRAINSTORM_ENTRY_TYPE, finalState);
+		saveState(ctx.cwd, finalState);
 
 		orchestrator = null;
 		renderer = null;
@@ -212,6 +236,56 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 			}
 
 			await startSession(ctx, configs);
+		},
+	});
+
+	api.registerCommand("resume", {
+		description: "Resume a previous brainstorm session",
+		handler: async (_args: string, ctx: ExtensionCommandContext) => {
+			if (isActive()) {
+				ctx.ui.notify("Brainstorm session already active. Use /brainstorm stop first.", "warning");
+				return;
+			}
+
+			const saved = loadState(ctx.cwd);
+			if (!saved?.messages?.length) {
+				ctx.ui.notify("No previous brainstorm session found in this project.", "warning");
+				return;
+			}
+
+			// Resolve agent configs
+			const configs: AgentConfig[] = [];
+			for (const agentName of Object.values(saved.agents)) {
+				const config = DEFAULT_AGENTS[agentName];
+				if (config) configs.push(config);
+			}
+
+			if (configs.length === 0) {
+				ctx.ui.notify("Could not find agent configs for resume.", "warning");
+				return;
+			}
+
+			// Start session
+			await startSession(ctx, configs);
+
+			// Replay history in renderer
+			if (renderer) {
+				renderer.replayHistory(saved.messages);
+			}
+
+			// Restore mute state
+			if (saved.mutedAgents) {
+				for (const name of saved.mutedAgents) {
+					orchestrator?.muteAgent(name);
+				}
+			}
+
+			// Restore messages in orchestrator
+			if (orchestrator) {
+				orchestrator.getState().messages = [...saved.messages];
+			}
+
+			ctx.ui.notify(`Resumed brainstorm with ${saved.messages.length} messages.`, "info");
 		},
 	});
 
@@ -418,6 +492,7 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 
 		// Persist updated state
 		api.appendEntry(BRAINSTORM_ENTRY_TYPE, orchestrator!.toJSON());
+		if (sessionCwd) saveState(sessionCwd, orchestrator!.toJSON());
 
 		return { action: "handled" };
 	});
@@ -451,60 +526,4 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 	process.on("SIGINT", cleanup);
 	process.on("SIGTERM", cleanup);
 
-	// ── Resume on session start ─────────────────────────────────────────
-
-	api.on("session_start", async (_event, ctx) => {
-		// Scan session entries for the last brainstorm_state custom entry
-		const entries = ctx.sessionManager.getEntries();
-		let lastBrainstormState: ReturnType<Orchestrator["toJSON"]> | null = null;
-
-		for (const entry of entries) {
-			if (entry.type === "custom" && entry.customType === BRAINSTORM_ENTRY_TYPE) {
-				lastBrainstormState = entry.data as ReturnType<Orchestrator["toJSON"]>;
-			}
-		}
-
-		if (!lastBrainstormState?.messages?.length) return;
-
-		// Offer to resume
-		const resume = await ctx.ui.confirm(
-			"Brainstorm Session",
-			`Found previous brainstorm with ${lastBrainstormState.messages.length} messages. Resume?`,
-		);
-
-		if (!resume) return;
-
-		// Resolve agent configs from saved agent names
-		const configs: AgentConfig[] = [];
-		for (const agentName of Object.values(lastBrainstormState.agents)) {
-			const config = DEFAULT_AGENTS[agentName];
-			if (config) configs.push(config);
-		}
-
-		if (configs.length === 0) {
-			ctx.ui.notify("Could not find agent configs for resume. Starting fresh.", "warning");
-			return;
-		}
-
-		// Start session with saved agents
-		await startSession(ctx, configs);
-
-		// Replay history in the renderer
-		if (renderer && lastBrainstormState.messages.length > 0) {
-			renderer.replayHistory(lastBrainstormState.messages);
-		}
-
-		// Restore mute state
-		if (lastBrainstormState.mutedAgents) {
-			for (const name of lastBrainstormState.mutedAgents) {
-				orchestrator?.muteAgent(name);
-			}
-		}
-
-		// Restore messages in orchestrator so subsequent messages include full context
-		if (orchestrator) {
-			const state = orchestrator.getState();
-			state.messages = [...lastBrainstormState.messages];
-		}
-	});
 }
