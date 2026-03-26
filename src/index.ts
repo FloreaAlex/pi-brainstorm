@@ -227,6 +227,49 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 				return;
 			}
 
+			if (trimmed === "resume") {
+				if (isActive()) {
+					ctx.ui.notify("Brainstorm session already active. Use /brainstorm stop first.", "warning");
+					return;
+				}
+
+				const saved = loadState(ctx.cwd);
+				if (!saved?.messages?.length) {
+					ctx.ui.notify("No previous brainstorm session found in this project.", "warning");
+					return;
+				}
+
+				const configs: AgentConfig[] = [];
+				for (const agentName of Object.values(saved.agents)) {
+					const config = DEFAULT_AGENTS[agentName];
+					if (config) configs.push(config);
+				}
+
+				if (configs.length === 0) {
+					ctx.ui.notify("Could not find agent configs for resume.", "warning");
+					return;
+				}
+
+				await startSession(ctx, configs);
+
+				if (renderer) {
+					renderer.replayHistory(saved.messages);
+				}
+
+				if (saved.mutedAgents) {
+					for (const name of saved.mutedAgents) {
+						orchestrator?.muteAgent(name);
+					}
+				}
+
+				if (orchestrator) {
+					orchestrator.getState().messages = [...saved.messages];
+				}
+
+				ctx.ui.notify(`Resumed brainstorm with ${saved.messages.length} messages.`, "info");
+				return;
+			}
+
 			// Resolve agent configs. Accept space-separated agent names or use defaults.
 			let configs: AgentConfig[];
 			if (trimmed) {
@@ -249,56 +292,6 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 			}
 
 			await startSession(ctx, configs);
-		},
-	});
-
-	api.registerCommand("brainstorm resume", {
-		description: "Resume a previous brainstorm session",
-		handler: async (_args: string, ctx: ExtensionCommandContext) => {
-			if (isActive()) {
-				ctx.ui.notify("Brainstorm session already active. Use /brainstorm stop first.", "warning");
-				return;
-			}
-
-			const saved = loadState(ctx.cwd);
-			if (!saved?.messages?.length) {
-				ctx.ui.notify("No previous brainstorm session found in this project.", "warning");
-				return;
-			}
-
-			// Resolve agent configs
-			const configs: AgentConfig[] = [];
-			for (const agentName of Object.values(saved.agents)) {
-				const config = DEFAULT_AGENTS[agentName];
-				if (config) configs.push(config);
-			}
-
-			if (configs.length === 0) {
-				ctx.ui.notify("Could not find agent configs for resume.", "warning");
-				return;
-			}
-
-			// Start session
-			await startSession(ctx, configs);
-
-			// Replay history in renderer
-			if (renderer) {
-				renderer.replayHistory(saved.messages);
-			}
-
-			// Restore mute state
-			if (saved.mutedAgents) {
-				for (const name of saved.mutedAgents) {
-					orchestrator?.muteAgent(name);
-				}
-			}
-
-			// Restore messages in orchestrator
-			if (orchestrator) {
-				orchestrator.getState().messages = [...saved.messages];
-			}
-
-			ctx.ui.notify(`Resumed brainstorm with ${saved.messages.length} messages.`, "info");
 		},
 	});
 
