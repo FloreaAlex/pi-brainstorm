@@ -60,7 +60,6 @@ export const DEFAULT_AGENTS: Record<string, AgentConfig> = {
 		env: {
 			CODEX_CLI_AUTH_CREDENTIALS_STORE: "file",
 			CODEX_HOME: `${process.env.HOME}/.codex`,
-			RUST_LOG: "debug",
 		},
 		color: "#10b981",
 		label: "Codex",
