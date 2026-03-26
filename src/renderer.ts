@@ -142,15 +142,22 @@ export class AgentBlock implements Component {
 			this.updateHeader();
 		}
 
-		// Pulsing: gentle glow cycle (bright for longer, dim briefly)
+		// Pulsing: smooth breathing via color interpolation
 		let borderColor: (s: string) => string;
 		if (this.pulsing) {
 			this.pulseFrame++;
-			// Bright for 8 frames, dim for 4 — gentle breathing effect
-			const inDimPhase = (this.pulseFrame % 12) >= 8;
-			borderColor = inDimPhase
-				? chalk.hex(this.colorHex).dim
-				: chalk.hex(this.colorHex);
+			// Sine wave over ~40 frames (~3.2s at 80ms) — smooth in and out
+			const t = Math.sin((this.pulseFrame / 40) * Math.PI * 2);
+			// Interpolate between 40% and 100% brightness
+			const brightness = 0.4 + 0.6 * ((t + 1) / 2);
+			const r = parseInt(this.colorHex.slice(1, 3), 16);
+			const g = parseInt(this.colorHex.slice(3, 5), 16);
+			const b = parseInt(this.colorHex.slice(5, 7), 16);
+			const br = Math.round(r * brightness);
+			const bg = Math.round(g * brightness);
+			const bb = Math.round(b * brightness);
+			const dimHex = `#${br.toString(16).padStart(2, "0")}${bg.toString(16).padStart(2, "0")}${bb.toString(16).padStart(2, "0")}`;
+			borderColor = chalk.hex(dimHex);
 		} else {
 			borderColor = chalk.hex(this.colorHex);
 		}
