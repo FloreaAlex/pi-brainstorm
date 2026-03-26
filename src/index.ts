@@ -317,14 +317,25 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 
 			const trimmed = args.trim();
 
-			// /auto continue [turns]
+			// /auto continue [turns] [message]
 			if (trimmed.startsWith("continue")) {
 				const rest = trimmed.slice("continue".length).trim();
-				const turns = rest ? parseInt(rest, 10) : 1;
+				const match = rest.match(/^(\d+)?\s*(.*)?$/);
+				const turns = match?.[1] ? parseInt(match[1], 10) : 1;
+				const message = match?.[2]?.trim() || undefined;
+
 				if (isNaN(turns) || turns < 1) {
-					ctx.ui.notify("Usage: /auto continue [turns]", "warning");
+					ctx.ui.notify("Usage: /auto continue [turns] [message]", "warning");
 					return;
 				}
+
+				// Inject user message into history if provided
+				if (message && orchestrator) {
+					orchestrator.getState().messages.push({ source: "user", content: message, timestamp: Date.now() });
+					renderer?.addUserMessage(message);
+					sessionUi?.setStatus("brainstorm", statusText());
+				}
+
 				ctx.ui.notify(`Continuing auto discussion for ${turns} more turn(s) each...`, "info");
 				await orchestrator!.continueAuto(turns);
 				return;
