@@ -379,6 +379,13 @@ export class Orchestrator {
 		this.emit({ type: "auto_complete" });
 	}
 
+	async cancelAll(): Promise<void> {
+		await this.agentManager.cancelAll();
+		if (this.autoMode.active) {
+			this.stopAuto();
+		}
+	}
+
 	async stop(): Promise<void> {
 		await this.agentManager.killAll();
 		this.state.active = false;

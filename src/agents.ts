@@ -203,6 +203,12 @@ export class AgentManager {
 		await agent.connection.cancel({ sessionId: agent.sessionId });
 	}
 
+	async cancelAll(): Promise<void> {
+		await Promise.allSettled(
+			[...this.agents.keys()].map((name) => this.cancelAgent(name)),
+		);
+	}
+
 	async killAgent(agentName: string): Promise<void> {
 		const agent = this.agents.get(agentName);
 		if (!agent) return;

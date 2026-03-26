@@ -390,6 +390,20 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 		},
 	});
 
+	api.registerCommand("stop", {
+		description: "Interrupt all running agents",
+		handler: async (_args: string, ctx: ExtensionCommandContext) => {
+			if (!isActive()) {
+				ctx.ui.notify("No active brainstorm session.", "warning");
+				return;
+			}
+			await orchestrator!.cancelAll();
+			if (spinnerInterval) { clearInterval(spinnerInterval); spinnerInterval = null; }
+			ctx.ui.setStatus("brainstorm", statusText());
+			ctx.ui.notify("Interrupted all agents.", "info");
+		},
+	});
+
 	api.registerCommand("auto", {
 		description: "Start autonomous agent discussion",
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
