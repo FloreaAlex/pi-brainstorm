@@ -51,6 +51,7 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 	let sessionUi: ExtensionContext["ui"] | null = null;
 	let sessionCwd: string | null = null;
 	let spinnerInterval: NodeJS.Timeout | null = null;
+	let autoStatusSuffix: string | null = null;
 
 	// ── Helpers ──────────────────────────────────────────────────────────
 
@@ -131,22 +132,21 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 					break;
 				case "auto_turn_start":
 					renderer.startAutoTurn(event.agentName);
+					autoStatusSuffix = `AUTO ${event.turn}/${event.totalTurns} ${event.agentName}'s turn`;
 					// Start spinner timer for auto mode
 					if (!spinnerInterval) {
 						spinnerInterval = setInterval(() => {
-							sessionUi?.setStatus("brainstorm", statusText(
-								`AUTO ${event.turn}/${event.totalTurns} ${event.agentName}'s turn`,
-							));
+							sessionUi?.setStatus("brainstorm", statusText(autoStatusSuffix ?? undefined));
 						}, 80);
 					}
-					ctx.ui.setStatus("brainstorm", statusText(
-						`AUTO ${event.turn}/${event.totalTurns} ${event.agentName}'s turn`,
-					));
+					ctx.ui.setStatus("brainstorm", statusText(autoStatusSuffix));
 					break;
 				case "auto_turn_end":
 					renderer.endAutoTurn(event.agentName);
+					autoStatusSuffix = null;
 					break;
 				case "auto_complete":
+					autoStatusSuffix = null;
 					if (spinnerInterval) { clearInterval(spinnerInterval); spinnerInterval = null; }
 					renderer.addSystemMessage("AUTO complete");
 					ctx.ui.setStatus("brainstorm", statusText());

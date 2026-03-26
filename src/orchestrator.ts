@@ -42,6 +42,7 @@ export class Orchestrator {
 	private promptSent = new Set<string>();
 	private autoMode: AutoModeState = { active: false, turnsRemaining: new Map(), turnOrder: [], currentTurnIdx: 0 };
 	private autoInterrupted = false;
+	private autoTotalTurns = 0;
 
 	constructor(cwd: string, agentManager?: AgentManager) {
 		this.cwd = cwd;
@@ -215,6 +216,7 @@ export class Orchestrator {
 			currentTurnIdx: 0,
 			topic,
 		};
+		this.autoTotalTurns = turnsPerAgent;
 		this.autoInterrupted = false;
 
 		await this.runAutoLoop();
@@ -229,6 +231,7 @@ export class Orchestrator {
 		}
 		this.autoMode.active = true;
 		this.autoMode.currentTurnIdx = 0;
+		this.autoTotalTurns = turnsPerAgent;
 		this.autoInterrupted = false;
 
 		await this.runAutoLoop();
@@ -267,16 +270,12 @@ export class Orchestrator {
 
 			const agentName = this.autoMode.turnOrder[this.autoMode.currentTurnIdx];
 			const remaining = this.autoMode.turnsRemaining.get(agentName) ?? 0;
-			const totalTurns = remaining; // Will be set properly below
 			const config = this.agentConfigs.get(agentName);
 			if (!config) break;
 
-			// Calculate which turn number this is
-			const allTurns = [...this.autoMode.turnsRemaining.values()];
-			const maxTurns = Math.max(...allTurns);
-			const currentTurn = maxTurns - remaining + 1;
+			const currentTurn = this.autoTotalTurns - remaining + 1;
 
-			this.emit({ type: "auto_turn_start", agentName, turn: currentTurn, totalTurns: maxTurns });
+			this.emit({ type: "auto_turn_start", agentName, turn: currentTurn, totalTurns: this.autoTotalTurns });
 
 			// Build auto prompt for this turn
 			const otherAgents = this.autoMode.turnOrder
@@ -285,7 +284,7 @@ export class Orchestrator {
 
 			const autoPrompt = buildAutoPrompt(
 				this.cwd, agentName, config.label, otherAgents,
-				currentTurn, maxTurns,
+				currentTurn, this.autoTotalTurns,
 				{ topic: this.autoMode.topic },
 			);
 
