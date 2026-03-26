@@ -145,12 +145,23 @@ export class AgentManager {
 			// ACP standard fallback that works for any agent.
 			try {
 				const modes = session.modes?.availableModes?.map((m: acp.SessionMode) => m.id) ?? [];
-				const fullMode = modes.find((m: string) => m === "bypassPermissions" || m === "full-access" || m === "dontAsk");
+				const fullMode = modes.find((m: string) => m === "bypassPermissions" || m === "full-access");
 				if (fullMode) {
 					await connection.setSessionMode({ sessionId: session.sessionId, modeId: fullMode });
 				}
 			} catch {
 				// Mode not supported — fine, requestPermission handles it
+			}
+
+			// Also set via config option if available (some bridges read this differently)
+			try {
+				await connection.setSessionConfigOption({
+					sessionId: session.sessionId,
+					optionId: "mode",
+					value: "bypassPermissions",
+				});
+			} catch {
+				// Config option not supported
 			}
 
 			state.status = "active";

@@ -48,7 +48,10 @@ export const DEFAULT_AGENTS: Record<string, AgentConfig> = {
 		name: "claude",
 		command: "claude-agent-acp",
 		args: [],
-		env: { ACP_PERMISSION_MODE: "bypassPermissions" },
+		env: {
+			ACP_PERMISSION_MODE: "bypassPermissions",
+			CLAUDE_CODE_PERMISSION_MODE: "bypassPermissions",
+		},
 		color: "#4a9eff",
 		label: "Claude",
 	},
