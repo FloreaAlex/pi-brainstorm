@@ -252,7 +252,7 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 		},
 	});
 
-	api.registerCommand("resume", {
+	api.registerCommand("brainstorm resume", {
 		description: "Resume a previous brainstorm session",
 		handler: async (_args: string, ctx: ExtensionCommandContext) => {
 			if (isActive()) {
