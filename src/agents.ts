@@ -43,14 +43,20 @@ export class AgentManager {
 				cwd,
 			});
 
-			// Log stderr to /tmp for debugging
-			const fs = await import("node:fs");
-			const logStream = fs.createWriteStream(`/tmp/${config.name}-acp-stderr.log`, { flags: "a" });
-			proc.stderr?.pipe(logStream);
+			// Discard stderr — ACP bridges emit noisy warnings
+			proc.stderr?.resume();
 
 			const input = Writable.toWeb(proc.stdin!);
 			const output = Readable.toWeb(proc.stdout!) as ReadableStream<Uint8Array>;
 			const stream = acp.ndJsonStream(input, output);
+
+			// Suppress noisy ACP SDK validation errors (tool_call schema mismatches from bridges)
+			const origConsoleError = console.error;
+			console.error = (...args: unknown[]) => {
+				const msg = String(args[0] ?? "");
+				if (msg.includes("Error handling notification") || msg.includes("Invalid params")) return;
+				origConsoleError(...args);
+			};
 
 			const agentName = config.name;
 			const connection = new acp.ClientSideConnection(

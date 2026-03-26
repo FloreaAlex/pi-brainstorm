@@ -142,13 +142,15 @@ export class AgentBlock implements Component {
 			this.updateHeader();
 		}
 
-		// Pulsing: alternate between bright and dim border
+		// Pulsing: gentle glow cycle (bright for longer, dim briefly)
 		let borderColor: (s: string) => string;
 		if (this.pulsing) {
 			this.pulseFrame++;
-			borderColor = this.pulseFrame % 2 === 0
-				? chalk.hex(this.colorHex)
-				: chalk.hex(this.colorHex).dim;
+			// Bright for 8 frames, dim for 4 — gentle breathing effect
+			const inDimPhase = (this.pulseFrame % 12) >= 8;
+			borderColor = inDimPhase
+				? chalk.hex(this.colorHex).dim
+				: chalk.hex(this.colorHex);
 		} else {
 			borderColor = chalk.hex(this.colorHex);
 		}
