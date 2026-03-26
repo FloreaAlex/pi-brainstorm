@@ -120,6 +120,8 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 					renderer.collapseSplitView();
 					if (spinnerInterval) { clearInterval(spinnerInterval); spinnerInterval = null; }
 					ctx.ui.setStatus("brainstorm", statusText());
+					// Save state after all agents have responded
+					if (sessionCwd && orchestrator) saveState(sessionCwd, orchestrator.toJSON());
 					break;
 				case "error":
 					ctx.ui.notify(`Agent ${event.agentName}: ${event.message}`, "error");
@@ -148,6 +150,7 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 					if (spinnerInterval) { clearInterval(spinnerInterval); spinnerInterval = null; }
 					ctx.ui.setStatus("brainstorm", statusText());
 					ctx.ui.notify("Auto discussion complete.", "info");
+					if (sessionCwd && orchestrator) saveState(sessionCwd, orchestrator.toJSON());
 					break;
 			}
 		});
@@ -496,9 +499,8 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 			console.error("Brainstorm send error:", err);
 		});
 
-		// Persist updated state
+		// Persist updated state (state also saved on all_done when agents finish)
 		api.appendEntry(BRAINSTORM_ENTRY_TYPE, orchestrator!.toJSON());
-		if (sessionCwd) saveState(sessionCwd, orchestrator!.toJSON());
 
 		return { action: "handled" };
 	});
