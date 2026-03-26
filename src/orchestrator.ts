@@ -402,6 +402,15 @@ export class Orchestrator {
 		return this.state.active;
 	}
 
+	/** Estimate total conversation tokens (excludes thinking). ~4 chars per token. */
+	getTokenEstimate(): number {
+		let chars = 0;
+		for (const msg of this.state.messages) {
+			chars += msg.source.length + msg.content.length + 5; // [source]: content\n
+		}
+		return Math.round(chars / 4);
+	}
+
 	/** Serialize state for session persistence */
 	toJSON(): { messages: BrainstormMessage[]; agents: Record<string, string>; mutedAgents: string[] } {
 		const agents: Record<string, string> = {};

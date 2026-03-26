@@ -58,14 +58,27 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 		return orchestrator?.isActive() ?? false;
 	}
 
+	function tokenLabel(): string {
+		if (!orchestrator) return "";
+		const tokens = orchestrator.getTokenEstimate();
+		let display: string;
+		if (tokens >= 1000) {
+			display = `${(tokens / 1000).toFixed(1)}k`;
+		} else {
+			display = String(tokens);
+		}
+		return chalk.dim(` ~${display} tokens`);
+	}
+
 	function statusText(suffix?: string): string {
 		const label = chalk.magenta.bold("\u26A1 Brainstorm");
-		if (suffix) return `${label} ${chalk.dim(suffix)}`;
+		const tokens = tokenLabel();
+		if (suffix) return `${label} ${chalk.dim(suffix)}${tokens}`;
 		const names = agentNames().map((n) => {
 			const config = DEFAULT_AGENTS[n];
 			return config ? chalk.hex(config.color)(n) : n;
 		});
-		return `${label} ${chalk.dim("[")}${names.join(chalk.dim(", "))}${chalk.dim("]")}`;
+		return `${label} ${chalk.dim("[")}${names.join(chalk.dim(", "))}${chalk.dim("]")}${tokens}`;
 	}
 
 	function agentNames(): string[] {
