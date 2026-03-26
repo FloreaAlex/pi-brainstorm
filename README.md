@@ -46,12 +46,14 @@ Both agents spawn and you're in a 3-way conversation.
 |---------|-------------|
 | `/brainstorm` | Start a brainstorm session with all configured agents |
 | `/brainstorm stop` | End the session and kill agent processes |
+| `/brainstorm resume` | Resume a previous session (replays full conversation history) |
 | `@claude <message>` | Direct a message to Claude only (Codex still sees the history) |
 | `@codex <message>` | Direct a message to Codex only |
 | `/mute <agent>` | Mute an agent (it stops responding but still sees messages) |
 | `/unmute <agent>` | Unmute an agent |
 | `/agents` | List active agents and their status |
 | `/restart <agent>` | Kill and re-spawn an agent |
+| `/stop` | Interrupt all agents mid-response |
 | `/auto [turns] [topic]` | Start autonomous discussion (agents talk to each other) |
 | `/auto continue [turns] [message]` | Continue auto discussion, optionally inject a steering message |
 

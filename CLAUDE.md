@@ -30,9 +30,26 @@ Always check the ACP spec and pi extension API before implementing anything:
 - Codex requires `CODEX_CLI_AUTH_CREDENTIALS_STORE=file` env var to avoid macOS Keychain popups in non-interactive subprocesses.
 - Claude bridge: `claude-agent-acp` (npm, `@zed-industries/claude-agent-acp`). Codex bridge: `codex-acp` (brew, `zed-industries/codex-acp`). The old `acp-claude-code` (Xuanwo) is archived — don't use it.
 - The ACP SDK validates incoming notifications with zod. `claude-agent-acp` sends `tool_call` updates that fail validation — these are suppressed via console.error filter. Not fixable on our side.
-- Pi's extension API has no `requestRender()` — use `ctx.ui.setStatus()` to trigger re-renders.
+- Pi's extension API has no `requestRender()` — use `ctx.ui.setStatus()` to trigger re-renders. Use a single status key to avoid footer clutter.
 - Pi extensions must export a `default` function, not a named export.
 - Prompt files (.md) must be copied to `dist/` in the build step — TypeScript doesn't copy non-ts files.
+- Pi already has a built-in `/resume` command — our resume is `/brainstorm resume` (subcommand).
+- State is saved to `.pi/brainstorm/state.json` in the project directory. Save AFTER agents respond (on `all_done`), not when the user sends the message.
+- Session state also saved via `api.appendEntry()` for pi's own session system.
+
+## Permissions — the full story
+
+Getting agents to have bash/edit access requires multiple layers:
+
+1. **ACP `requestPermission`** handler auto-approves — works for all agents.
+2. **ACP `setSessionMode`** to `bypassPermissions` (Claude) or `full-access` (Codex) — reduces permission prompts.
+3. **ACP `setSessionConfigOption`** with `optionId: "mode"` — another path some bridges read.
+4. **`[ACP:PERMISSION:BYPASS]`** marker at the top of prompt templates — inline override that `claude-agent-acp` reads.
+5. **`ACP_PERMISSION_MODE=bypassPermissions`** env var on Claude's spawn — may or may not be read depending on bridge version.
+6. **`~/.claude/settings.json`** with `"permissions": { "defaultMode": "bypassPermissions" }` — this is what `claude-agent-acp` actually reads via the Claude Agent SDK's `SettingsManager`. This is the most reliable for Claude.
+7. **Codex** uses `-c sandbox_permissions=[...]` CLI flag for file/network access and `full-access` ACP mode.
+
+If agents still complain about blocked tools, check `~/.claude/settings.json` first.
 
 ## Gotchas
 
@@ -40,6 +57,8 @@ Always check the ACP spec and pi extension API before implementing anything:
 - Extension discovery path is `~/.pi/agent/extensions/`, NOT `~/.pi/extensions/`.
 - Each ACP bridge handles capabilities differently. Always test with real bridges, not just mocks.
 - Codex-acp `session/new` hangs if keychain auth fails silently. The `authenticate` call before `newSession` helps but isn't always sufficient — file-based auth via env var is the reliable fix.
+- The spinner interval (80ms) must be cleared on `all_done`, `auto_complete`, `/stop`, and cleanup. Leaked intervals cause ghost renders.
+- When tracking mutable state for status bar updates (like auto turn info), use a module-level variable — don't capture event data in interval closures or it goes stale.
 
 ## Dev
 
@@ -47,7 +66,6 @@ Always check the ACP spec and pi extension API before implementing anything:
 npm run build    # compile + copy prompt .md files to dist
 npm run dev      # watch mode
 npm test         # unit tests
-npm run test:e2e # E2E tests (requires ACP bridges installed + authenticated)
 ```
 
 Extension is symlinked at `~/.pi/agent/extensions/pi-brainstorm`.
