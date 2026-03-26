@@ -90,8 +90,29 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 					ctx.ui.notify(`Agent ${event.agentName}: ${event.message}`, "error");
 					break;
 				case "agent_status":
-					// Just trigger a render, don't add extra status keys
 					ctx.ui.setStatus("brainstorm", statusText());
+					break;
+				case "auto_turn_start":
+					renderer.startAutoTurn(event.agentName);
+					// Start spinner timer for auto mode
+					if (!spinnerInterval) {
+						spinnerInterval = setInterval(() => {
+							sessionUi?.setStatus("brainstorm", statusText(
+								`AUTO ${event.turn}/${event.totalTurns} ${event.agentName}'s turn`,
+							));
+						}, 80);
+					}
+					ctx.ui.setStatus("brainstorm", statusText(
+						`AUTO ${event.turn}/${event.totalTurns} ${event.agentName}'s turn`,
+					));
+					break;
+				case "auto_turn_end":
+					renderer.endAutoTurn(event.agentName);
+					break;
+				case "auto_complete":
+					if (spinnerInterval) { clearInterval(spinnerInterval); spinnerInterval = null; }
+					ctx.ui.setStatus("brainstorm", statusText());
+					ctx.ui.notify("Auto discussion complete.", "info");
 					break;
 			}
 		});
@@ -286,11 +307,55 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 		},
 	});
 
+	api.registerCommand("auto", {
+		description: "Start autonomous agent discussion",
+		handler: async (args: string, ctx: ExtensionCommandContext) => {
+			if (!isActive()) {
+				ctx.ui.notify("No active brainstorm session.", "warning");
+				return;
+			}
+
+			const trimmed = args.trim();
+
+			// /auto continue [turns]
+			if (trimmed.startsWith("continue")) {
+				const rest = trimmed.slice("continue".length).trim();
+				const turns = rest ? parseInt(rest, 10) : 1;
+				if (isNaN(turns) || turns < 1) {
+					ctx.ui.notify("Usage: /auto continue [turns]", "warning");
+					return;
+				}
+				ctx.ui.notify(`Continuing auto discussion for ${turns} more turn(s) each...`, "info");
+				await orchestrator!.continueAuto(turns);
+				return;
+			}
+
+			// /auto [turns] [topic]
+			const match = trimmed.match(/^(\d+)?\s*(.*)?$/);
+			const turns = match?.[1] ? parseInt(match[1], 10) : 3;
+			const topic = match?.[2]?.trim() || undefined;
+
+			ctx.ui.notify(
+				`Starting auto discussion: ${turns} turns each${topic ? `, topic: "${topic}"` : ""}`,
+				"info",
+			);
+			await orchestrator!.startAuto(turns, topic);
+		},
+	});
+
 	// ── Input interception ──────────────────────────────────────────────
 
 	api.on("input", (event: InputEvent): InputEventResult => {
 		if (!isActive()) {
 			return { action: "continue" };
+		}
+
+		// If in auto mode, any non-slash input interrupts it
+		if (orchestrator!.isAutoMode() && !event.text.startsWith("/")) {
+			orchestrator!.stopAuto();
+			sessionUi?.setStatus("brainstorm", statusText());
+			if (spinnerInterval) { clearInterval(spinnerInterval); spinnerInterval = null; }
+			// Fall through to process the message normally
 		}
 
 		// Don't intercept slash commands — let them through

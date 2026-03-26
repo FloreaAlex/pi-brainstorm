@@ -19,7 +19,16 @@ export function parsePromptTemplate(raw: string): { body: string } {
 }
 
 export function interpolatePrompt(template: string, variables: Record<string, string>): string {
-	return template.replace(/\{\{(\w+)\}\}/g, (_, key) => variables[key] ?? `{{${key}}}`);
+	// First handle conditional blocks: {{#var}}content{{/var}}
+	let result = template.replace(
+		/\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}/g,
+		(_, key, content) => (variables[key] ? content : ""),
+	);
+	// Then replace simple variables: {{var}}
+	result = result.replace(/\{\{(\w+)\}\}/g, (_, key) => variables[key] ?? `{{${key}}}`);
+	// Clean up double blank lines left by removed conditional blocks
+	result = result.replace(/\n{3,}/g, "\n\n");
+	return result.trim();
 }
 
 export function buildAgentPrompt(cwd: string, agentName: string, agentLabel: string, participants: string[]): string {
@@ -30,5 +39,33 @@ export function buildAgentPrompt(cwd: string, agentName: string, agentLabel: str
 		agent_label: agentLabel,
 		participants: participants.join(", "),
 		working_directory: cwd,
+	});
+}
+
+export function loadAutoPromptTemplate(): string {
+	const defaultPrompt = join(__dirname, "AUTO_PROMPT.md");
+	return readFileSync(defaultPrompt, "utf-8");
+}
+
+export function buildAutoPrompt(
+	cwd: string,
+	agentName: string,
+	agentLabel: string,
+	otherAgents: string[],
+	currentTurn: number,
+	totalTurns: number,
+	options: { topic?: string; isSummary?: boolean },
+): string {
+	const raw = loadAutoPromptTemplate();
+	const { body } = parsePromptTemplate(raw);
+	return interpolatePrompt(body, {
+		agent_name: agentName,
+		agent_label: agentLabel,
+		other_agents: otherAgents.join(", "),
+		current_turn: String(currentTurn),
+		total_turns: String(totalTurns),
+		working_directory: cwd,
+		topic: options.topic ?? "",
+		is_summary: options.isSummary ? "true" : "",
 	});
 }

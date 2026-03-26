@@ -73,6 +73,8 @@ export class AgentBlock implements Component {
 	private inner: Container;
 	private spinnerFrames: string[];
 	private spinnerIdx = 0;
+	private pulsing = false;
+	private pulseFrame = 0;
 
 	constructor(agentLabel: string, colorHex: string, markdownTheme: MarkdownTheme) {
 		this.agentLabel = agentLabel;
@@ -117,6 +119,11 @@ export class AgentBlock implements Component {
 		this.updateHeader();
 	}
 
+	setPulsing(pulsing: boolean): void {
+		this.pulsing = pulsing;
+		if (!pulsing) this.pulseFrame = 0;
+	}
+
 	toggleThought(): void {
 		this.thoughtExpanded = !this.thoughtExpanded;
 	}
@@ -135,20 +142,30 @@ export class AgentBlock implements Component {
 			this.updateHeader();
 		}
 
-		const colorFn = chalk.hex(this.colorHex);
-		const contentWidth = Math.max(1, width - 4); // 4 = "│ " left + " │" right
+		// Pulsing: alternate between bright and dim border
+		let borderColor: (s: string) => string;
+		if (this.pulsing) {
+			this.pulseFrame++;
+			borderColor = this.pulseFrame % 2 === 0
+				? chalk.hex(this.colorHex)
+				: chalk.hex(this.colorHex).dim;
+		} else {
+			borderColor = chalk.hex(this.colorHex);
+		}
+		const colorFn = borderColor;
+		const labelColor = chalk.hex(this.colorHex); // label always bright
+		const contentWidth = Math.max(1, width - 4);
 		const leftBorder = colorFn("\u2502 ");
-		const rightBorder = colorFn(" \u2502");
 		const result: string[] = [];
 
 		// Top border: ╭─── Agent ───╮
 		const headerText = this.streaming
 			? ` ${this.spinnerFrames[this.spinnerIdx % this.spinnerFrames.length]} ${this.agentLabel} `
 			: ` ${this.agentLabel} `;
-		const topLineLen = Math.max(0, width - 2 - headerText.length); // -2 for ╭ and ╮
+		const topLineLen = Math.max(0, width - 2 - headerText.length);
 		const topLeft = Math.floor(topLineLen / 4);
 		const topRight = topLineLen - topLeft;
-		result.push(colorFn(`\u256D${"─".repeat(topLeft)}${chalk.bold(headerText)}${"─".repeat(topRight)}\u256E`));
+		result.push(colorFn("\u256D" + "─".repeat(topLeft)) + labelColor(chalk.bold(headerText)) + colorFn("─".repeat(topRight) + "\u256E"));
 
 		// Collapsed thought toggle (only when done and has thought)
 		if (!this.streaming && this.thoughtText) {
@@ -320,6 +337,32 @@ export class BrainstormRenderer {
 			if (child instanceof AgentBlock) {
 				child.toggleThought();
 			}
+		}
+	}
+
+	/** Start a single-agent streaming block for auto mode turns. */
+	startAutoTurn(agentName: string): void {
+		this.activeBlocks.clear();
+
+		const config = this.agentConfigs.get(agentName);
+		const label = config?.label ?? agentName;
+		const color = config?.color ?? "#888888";
+		const block = new AgentBlock(label, color, this.markdownTheme);
+		block.setPulsing(true);
+		this.activeBlocks.set(agentName, block);
+
+		const spacer = new Spacer(1);
+		this.managedChildren.push(spacer, block);
+		this.container.addChild(spacer);
+		this.container.addChild(block);
+	}
+
+	/** End an auto mode turn — stop pulsing. */
+	endAutoTurn(agentName: string): void {
+		const block = this.activeBlocks.get(agentName);
+		if (block) {
+			block.setStreaming(false);
+			block.setPulsing(false);
 		}
 	}
 

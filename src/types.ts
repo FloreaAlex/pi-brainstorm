@@ -35,6 +35,14 @@ export interface StreamChunk {
 	kind: "message" | "thought";
 }
 
+export interface AutoModeState {
+	active: boolean;
+	turnsRemaining: Map<string, number>;
+	turnOrder: string[];
+	currentTurnIdx: number;
+	topic?: string;
+}
+
 export const DEFAULT_AGENTS: Record<string, AgentConfig> = {
 	claude: {
 		name: "claude",
