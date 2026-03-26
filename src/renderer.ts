@@ -244,6 +244,27 @@ export class UserMessageBlock implements Component {
 	}
 }
 
+/**
+ * Inline system/status message — dim centered text with separator lines.
+ */
+export class SystemMessage implements Component {
+	private message: string;
+
+	constructor(message: string) {
+		this.message = message;
+	}
+
+	invalidate(): void {}
+
+	render(width: number): string[] {
+		const text = ` ${this.message} `;
+		const remaining = Math.max(0, width - text.length);
+		const left = Math.floor(remaining / 2);
+		const right = remaining - left;
+		return [chalk.dim("─".repeat(left) + text + "─".repeat(right))];
+	}
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // BrainstormRenderer
 // ────────────────────────────────────────────────────────────────────────────
@@ -287,6 +308,15 @@ export class BrainstormRenderer {
 		this.managedChildren.push(spacer, block);
 		this.container.addChild(spacer);
 		this.container.addChild(block);
+	}
+
+	/** Show an inline system/status message in the chat flow. */
+	addSystemMessage(text: string): void {
+		const spacer = new Spacer(1);
+		const msg = new SystemMessage(text);
+		this.managedChildren.push(spacer, msg);
+		this.container.addChild(spacer);
+		this.container.addChild(msg);
 	}
 
 	/**

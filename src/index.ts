@@ -148,8 +148,8 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 					break;
 				case "auto_complete":
 					if (spinnerInterval) { clearInterval(spinnerInterval); spinnerInterval = null; }
+					renderer.addSystemMessage("AUTO complete");
 					ctx.ui.setStatus("brainstorm", statusText());
-					ctx.ui.notify("Auto discussion complete.", "info");
 					if (sessionCwd && orchestrator) saveState(sessionCwd, orchestrator.toJSON());
 					break;
 			}
@@ -433,7 +433,8 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 					sessionUi?.setStatus("brainstorm", statusText());
 				}
 
-				ctx.ui.notify(`Continuing auto discussion for ${turns} more turn(s) each...`, "info");
+				renderer?.addSystemMessage(`AUTO continue: ${turns} more turn(s) each`);
+				sessionUi?.setStatus("brainstorm", statusText());
 				await orchestrator!.continueAuto(turns);
 				return;
 			}
@@ -443,10 +444,9 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 			const turns = match?.[1] ? parseInt(match[1], 10) : 3;
 			const topic = match?.[2]?.trim() || undefined;
 
-			ctx.ui.notify(
-				`Starting auto discussion: ${turns} turns each${topic ? `, topic: "${topic}"` : ""}`,
-				"info",
-			);
+			const label = `AUTO: ${turns} turns each${topic ? ` — ${topic}` : ""}`;
+			renderer?.addSystemMessage(label);
+			sessionUi?.setStatus("brainstorm", statusText());
 			await orchestrator!.startAuto(turns, topic);
 		},
 	});
