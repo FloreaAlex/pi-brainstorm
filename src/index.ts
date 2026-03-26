@@ -12,7 +12,8 @@ import type {
 	InputEvent,
 	InputEventResult,
 } from "@mariozechner/pi-coding-agent";
-import { Orchestrator } from "./orchestrator.js";
+import chalk from "chalk";
+import { Orchestrator, parseMentions } from "./orchestrator.js";
 import { BrainstormRenderer } from "./renderer.js";
 import { type AgentConfig, DEFAULT_AGENTS } from "./types.js";
 
@@ -22,15 +23,28 @@ const BRAINSTORM_ENTRY_TYPE = "brainstorm_state";
 /**
  * Extension factory. Called once during extension loading.
  */
-export function brainstormExtension(api: ExtensionAPI): void {
+export default function brainstormExtension(api: ExtensionAPI): void {
 	let orchestrator: Orchestrator | null = null;
 	let renderer: BrainstormRenderer | null = null;
 	let unsubOrchestrator: (() => void) | null = null;
+	let unsubKeyHandler: (() => void) | null = null;
+	let sessionUi: ExtensionContext["ui"] | null = null;
+	let spinnerInterval: NodeJS.Timeout | null = null;
 
 	// ── Helpers ──────────────────────────────────────────────────────────
 
 	function isActive(): boolean {
 		return orchestrator?.isActive() ?? false;
+	}
+
+	function statusText(suffix?: string): string {
+		const label = chalk.magenta.bold("\u26A1 Brainstorm");
+		if (suffix) return `${label} ${chalk.dim(suffix)}`;
+		const names = agentNames().map((n) => {
+			const config = DEFAULT_AGENTS[n];
+			return config ? chalk.hex(config.color)(n) : n;
+		});
+		return `${label} ${chalk.dim("[")}${names.join(chalk.dim(", "))}${chalk.dim("]")}`;
 	}
 
 	function agentNames(): string[] {
@@ -43,6 +57,7 @@ export function brainstormExtension(api: ExtensionAPI): void {
 			ctx.ui.notify("Brainstorm session already active. Use /brainstorm stop to end it.", "warning");
 			return;
 		}
+		sessionUi = ctx.ui;
 
 		renderer = new BrainstormRenderer();
 		orchestrator = new Orchestrator(ctx.cwd);
@@ -53,37 +68,48 @@ export function brainstormExtension(api: ExtensionAPI): void {
 		}
 
 		// Wire orchestrator events to the renderer.
-		// After updating renderer state, we call setStatus to trigger a TUI re-render,
-		// since the extension API has no direct requestRender() method.
+		// We use a single setStatus key "brainstorm" to trigger TUI re-renders.
 		unsubOrchestrator = orchestrator.onEvent((event) => {
 			if (!renderer) return;
 
 			switch (event.type) {
 				case "stream":
-					renderer.onStreamChunk(event.agentName, event.text);
-					// Trigger TUI re-render so the new text appears
-					ctx.ui.setStatus("brainstorm:stream", `${event.agentName}: streaming...`);
+					renderer.onStreamChunk(event.agentName, event.text, event.kind);
+					ctx.ui.setStatus("brainstorm", statusText(`${event.agentName} ${event.kind === "thought" ? "thinking..." : "streaming..."}`));
 					break;
 				case "done":
 					renderer.onAgentDone(event.agentName);
-					ctx.ui.setStatus(`brainstorm:${event.agentName}`, `${event.agentName}: done`);
+					ctx.ui.setStatus("brainstorm", statusText());
 					break;
 				case "all_done":
 					renderer.collapseSplitView();
-					ctx.ui.setStatus("brainstorm:stream", undefined);
+					if (spinnerInterval) { clearInterval(spinnerInterval); spinnerInterval = null; }
+					ctx.ui.setStatus("brainstorm", statusText());
 					break;
 				case "error":
 					ctx.ui.notify(`Agent ${event.agentName}: ${event.message}`, "error");
 					break;
 				case "agent_status":
-					ctx.ui.setStatus(`brainstorm:${event.agentName}`, `${event.agentName}: ${event.status}`);
+					// Just trigger a render, don't add extra status keys
+					ctx.ui.setStatus("brainstorm", statusText());
 					break;
 			}
 		});
 
 		// Mount the renderer container as a widget
 		ctx.ui.setWidget("brainstorm", (_tui, _theme) => renderer!.getContainer(), { placement: "aboveEditor" });
-		ctx.ui.setStatus("brainstorm", "Brainstorm: starting agents...");
+		ctx.ui.setStatus("brainstorm", statusText("connecting..."));
+
+		// Cmd+E / Ctrl+E toggles reasoning visibility
+		unsubKeyHandler = ctx.ui.onTerminalInput((data: string) => {
+			if (data === "\x05" && renderer) {
+				// Ctrl+E toggles reasoning blocks
+				renderer.toggleThoughts();
+				sessionUi?.setStatus("brainstorm", statusText());
+				return { consume: true };
+			}
+			return {};
+		});
 
 		await orchestrator.start(configs);
 
@@ -107,24 +133,26 @@ export function brainstormExtension(api: ExtensionAPI): void {
 
 		await orchestrator!.stop();
 
-		// Clean up event subscription
+		// Clean up subscriptions
 		if (unsubOrchestrator) {
 			unsubOrchestrator();
 			unsubOrchestrator = null;
+		}
+		if (unsubKeyHandler) {
+			unsubKeyHandler();
+			unsubKeyHandler = null;
 		}
 
 		// Remove widget and status
 		ctx.ui.setWidget("brainstorm", undefined);
 		ctx.ui.setStatus("brainstorm", undefined);
-		for (const name of names) {
-			ctx.ui.setStatus(`brainstorm:${name}`, undefined);
-		}
 
 		// Persist final state
 		api.appendEntry(BRAINSTORM_ENTRY_TYPE, finalState);
 
 		orchestrator = null;
 		renderer = null;
+		sessionUi = null;
 
 		ctx.ui.notify("Brainstorm session ended.", "info");
 	}
@@ -277,14 +305,33 @@ export function brainstormExtension(api: ExtensionAPI): void {
 		if (renderer) {
 			renderer.addUserMessage(text);
 
-			// Start streaming blocks for responding agents
-			const names = agentNames().filter((n) => {
+			// Determine which agents will actually respond (respecting @mentions and mute)
+			const allNames = agentNames();
+			const { mentions } = parseMentions(text, allNames);
+			const mutedAgents = orchestrator!.toJSON().mutedAgents;
+			let respondingNames: string[];
+			if (mentions.length > 0) {
+				respondingNames = mentions;
+			} else {
+				respondingNames = allNames.filter((n) => !mutedAgents.includes(n));
+			}
+			// Further filter to only active agents
+			respondingNames = respondingNames.filter((n) => {
 				const state = orchestrator!.getState().agents.get(n);
 				return state && state.status === "active";
 			});
-			if (names.length > 0) {
-				renderer.startStreaming(names);
+			if (respondingNames.length > 0) {
+				renderer.startStreaming(respondingNames);
 			}
+
+			// Start spinner animation timer — triggers re-renders every 80ms
+			if (spinnerInterval) clearInterval(spinnerInterval);
+			spinnerInterval = setInterval(() => {
+				sessionUi?.setStatus("brainstorm", statusText());
+			}, 80);
+
+			// Trigger immediate render so user message + streaming UI appear now
+			sessionUi?.setStatus("brainstorm", statusText("thinking..."));
 		}
 
 		// Send to orchestrator (fire-and-forget; streaming handled via events)
@@ -299,19 +346,34 @@ export function brainstormExtension(api: ExtensionAPI): void {
 		return { action: "handled" };
 	});
 
-	// ── Cleanup on session shutdown ─────────────────────────────────────
+	// ── Cleanup ────────────────────────────────────────────────────────
 
-	api.on("session_shutdown", async () => {
+	function cleanup(): void {
+		if (spinnerInterval) { clearInterval(spinnerInterval); spinnerInterval = null; }
 		if (orchestrator?.isActive()) {
-			await orchestrator.stop();
+			orchestrator.killSync();
 		}
 		if (unsubOrchestrator) {
 			unsubOrchestrator();
 			unsubOrchestrator = null;
 		}
+		if (unsubKeyHandler) {
+			unsubKeyHandler();
+			unsubKeyHandler = null;
+		}
 		orchestrator = null;
 		renderer = null;
+		sessionUi = null;
+	}
+
+	api.on("session_shutdown", async () => {
+		cleanup();
 	});
+
+	// Handle unexpected exits — kill ACP subprocesses so they don't become orphans
+	process.on("exit", cleanup);
+	process.on("SIGINT", cleanup);
+	process.on("SIGTERM", cleanup);
 
 	// ── Resume on session start ─────────────────────────────────────────
 

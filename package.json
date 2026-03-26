@@ -7,7 +7,7 @@
 		"extensions": ["dist/index.js"]
 	},
 	"scripts": {
-		"build": "tsc",
+		"build": "tsc && cp src/PROMPT.md dist/",
 		"dev": "tsc --watch",
 		"test": "vitest --run",
 		"test:e2e": "vitest --run test/e2e-acp.test.ts"

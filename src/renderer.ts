@@ -10,9 +10,25 @@ import chalk from "chalk";
 import { SplitColumn } from "./split-column.js";
 import type { AgentConfig, BrainstormMessage } from "./types.js";
 
-/** Default markdown theme — plain, no custom colors. */
+/** Default markdown theme — plain passthrough, no custom colors. */
 function getDefaultMarkdownTheme(): MarkdownTheme {
-	return {} as MarkdownTheme;
+	const id = (t: string) => t;
+	return {
+		heading: id,
+		link: id,
+		linkUrl: id,
+		code: id,
+		codeBlock: id,
+		codeBlockBorder: id,
+		quote: id,
+		quoteBorder: id,
+		hr: id,
+		listBullet: id,
+		bold: id,
+		italic: id,
+		strikethrough: id,
+		underline: id,
+	};
 }
 
 /**
@@ -20,6 +36,18 @@ function getDefaultMarkdownTheme(): MarkdownTheme {
  * Below this we stack agents vertically.
  */
 const MIN_SIDE_BY_SIDE_WIDTH = 80;
+
+/** Spinner frames — Claude Code style (braille dots) */
+const CLAUDE_SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+/** Spinner frames — OpenAI style (rotating circle) */
+const OPENAI_SPINNER = ["◐", "◓", "◑", "◒"];
+
+/** Pick spinner frames based on agent name */
+function getSpinnerFrames(agentName: string): string[] {
+	if (agentName.toLowerCase().includes("codex")) return OPENAI_SPINNER;
+	return CLAUDE_SPINNER;
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // AgentBlock
@@ -36,45 +64,65 @@ export class AgentBlock implements Component {
 	private agentLabel: string;
 	private colorHex: string;
 	private streaming: boolean;
-	private text: string;
+	private messageText: string;
+	private thoughtText: string;
+	private thoughtExpanded = false;
 	private markdownTheme: MarkdownTheme;
 	private header: Text;
 	private body: Markdown;
 	private inner: Container;
+	private spinnerFrames: string[];
+	private spinnerIdx = 0;
 
 	constructor(agentLabel: string, colorHex: string, markdownTheme: MarkdownTheme) {
 		this.agentLabel = agentLabel;
 		this.colorHex = colorHex;
 		this.streaming = true;
-		this.text = "";
+		this.messageText = "";
+		this.thoughtText = "";
 		this.markdownTheme = markdownTheme;
+		this.spinnerFrames = getSpinnerFrames(agentLabel);
 
 		this.header = new Text("", 0, 0);
 		this.body = new Markdown("", 0, 0, this.markdownTheme);
 		this.inner = new Container();
-		this.inner.addChild(this.header);
 		this.inner.addChild(this.body);
-
-		this.updateHeader();
 	}
 
 	setText(text: string): void {
-		this.text = text;
+		this.messageText = text;
 		this.body.setText(text);
 	}
 
-	appendText(chunk: string): void {
-		this.text += chunk;
-		this.body.setText(this.text);
+	appendText(chunk: string, kind: "message" | "thought" = "message"): void {
+		if (kind === "thought") {
+			this.thoughtText += chunk;
+			// While streaming, show thoughts in the body so user sees activity
+			if (this.streaming) {
+				this.body.setText(this.thoughtText);
+			}
+		} else {
+			this.messageText += chunk;
+			// Once message content starts, show only message
+			this.body.setText(this.messageText);
+		}
 	}
 
 	setStreaming(streaming: boolean): void {
 		this.streaming = streaming;
+		// When done streaming, show only the message (hide reasoning)
+		if (!streaming && this.messageText) {
+			this.body.setText(this.messageText);
+		}
 		this.updateHeader();
 	}
 
+	toggleThought(): void {
+		this.thoughtExpanded = !this.thoughtExpanded;
+	}
+
 	getText(): string {
-		return this.text;
+		return this.messageText;
 	}
 
 	invalidate(): void {
@@ -82,30 +130,67 @@ export class AgentBlock implements Component {
 	}
 
 	render(width: number): string[] {
+		// Advance spinner on each render while streaming
+		if (this.streaming) {
+			this.updateHeader();
+		}
+
 		const colorFn = chalk.hex(this.colorHex);
-		const border = colorFn("\u2502 ");
-		// 2 visible columns used by the border
-		const contentWidth = Math.max(1, width - 2);
-		const innerLines = this.inner.render(contentWidth);
-
+		const contentWidth = Math.max(1, width - 4); // 4 = "│ " left + " │" right
+		const leftBorder = colorFn("\u2502 ");
+		const rightBorder = colorFn(" \u2502");
 		const result: string[] = [];
-		for (const line of innerLines) {
-			result.push(border + line);
+
+		// Top border: ╭─── Agent ───╮
+		const headerText = this.streaming
+			? ` ${this.spinnerFrames[this.spinnerIdx % this.spinnerFrames.length]} ${this.agentLabel} `
+			: ` ${this.agentLabel} `;
+		const topLineLen = Math.max(0, width - 2 - headerText.length); // -2 for ╭ and ╮
+		const topLeft = Math.floor(topLineLen / 4);
+		const topRight = topLineLen - topLeft;
+		result.push(colorFn(`\u256D${"─".repeat(topLeft)}${chalk.bold(headerText)}${"─".repeat(topRight)}\u256E`));
+
+		// Collapsed thought toggle (only when done and has thought)
+		if (!this.streaming && this.thoughtText) {
+			const arrow = this.thoughtExpanded ? "\u25BC" : "\u25B6";
+			const hint = chalk.dim(` ${arrow} reasoning ${chalk.italic("(Ctrl+E)")}`);
+			result.push(leftBorder + hint);
+
+			if (this.thoughtExpanded) {
+				const thoughtMd = new Markdown(this.thoughtText, 0, 0, this.markdownTheme);
+				const thoughtLines = thoughtMd.render(contentWidth);
+				for (const line of thoughtLines) {
+					result.push(leftBorder + chalk.dim(line));
+				}
+				result.push(leftBorder); // spacer after thought
+			}
 		}
 
-		// Ensure at least the header renders even if content is empty
-		if (result.length === 0) {
-			result.push(border);
+		// Message body
+		const bodyLines = this.body.render(contentWidth);
+		for (const line of bodyLines) {
+			result.push(leftBorder + line);
 		}
+
+		if (bodyLines.length === 0) {
+			result.push(leftBorder);
+		}
+
+		// Bottom border: ╰───────────╯
+		result.push(colorFn(`\u2570${"─".repeat(Math.max(0, width - 2))}\u256F`));
 
 		return result;
 	}
 
 	private updateHeader(): void {
 		const colorFn = chalk.hex(this.colorHex);
-		const label = colorFn(chalk.bold(this.agentLabel));
-		const status = this.streaming ? chalk.dim(" streaming\u2026") : "";
-		this.header.setText(label + status);
+		if (this.streaming) {
+			const frame = this.spinnerFrames[this.spinnerIdx % this.spinnerFrames.length];
+			this.spinnerIdx++;
+			this.header.setText(`${colorFn(frame)} ${colorFn(chalk.bold(this.agentLabel))}`);
+		} else {
+			this.header.setText(colorFn(chalk.bold(this.agentLabel)));
+		}
 	}
 }
 
@@ -218,10 +303,23 @@ export class BrainstormRenderer {
 	}
 
 	/** Feed a text chunk to the correct agent's block. */
-	onStreamChunk(agentName: string, text: string): void {
+	onStreamChunk(agentName: string, text: string, kind: "message" | "thought" = "message"): void {
 		const block = this.activeBlocks.get(agentName);
 		if (block) {
-			block.appendText(text);
+			block.appendText(text, kind);
+		}
+	}
+
+	/** Toggle reasoning visibility for all agent blocks. */
+	toggleThoughts(): void {
+		for (const block of this.activeBlocks.values()) {
+			block.toggleThought();
+		}
+		// Also toggle on completed blocks in managed children
+		for (const child of this.managedChildren) {
+			if (child instanceof AgentBlock) {
+				child.toggleThought();
+			}
 		}
 	}
 

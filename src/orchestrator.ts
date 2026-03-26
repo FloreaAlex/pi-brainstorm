@@ -1,9 +1,10 @@
 import type { ContentBlock } from "@agentclientprotocol/sdk";
 import { AgentManager } from "./agents.js";
+import { buildAgentPrompt } from "./prompt.js";
 import type { AgentConfig, BrainstormMessage, BrainstormState, StreamChunk } from "./types.js";
 
 export type OrchestratorEvent =
-	| { type: "stream"; agentName: string; text: string }
+	| { type: "stream"; agentName: string; text: string; kind: "message" | "thought" }
 	| { type: "done"; agentName: string }
 	| { type: "all_done" }
 	| { type: "error"; agentName: string; message: string }
@@ -34,6 +35,8 @@ export class Orchestrator {
 	private mutedAgents = new Set<string>();
 	private callbacks = new Set<OrchestratorCallback>();
 	private cwd: string;
+	private agentConfigs = new Map<string, AgentConfig>();
+	private promptSent = new Set<string>();
 
 	constructor(cwd: string, agentManager?: AgentManager) {
 		this.cwd = cwd;
@@ -44,7 +47,7 @@ export class Orchestrator {
 			if (chunk.done) {
 				this.emit({ type: "done", agentName: chunk.agentName });
 			} else {
-				this.emit({ type: "stream", agentName: chunk.agentName, text: chunk.text });
+				this.emit({ type: "stream", agentName: chunk.agentName, text: chunk.text, kind: chunk.kind });
 			}
 		});
 	}
@@ -62,6 +65,7 @@ export class Orchestrator {
 		this.state.active = true;
 
 		for (const config of configs) {
+			this.agentConfigs.set(config.name, config);
 			const agentState = await this.agentManager.spawnAgent(config, this.cwd);
 			this.state.agents.set(config.name, agentState);
 			this.emit({ type: "agent_status", agentName: config.name, status: agentState.status });
@@ -70,6 +74,17 @@ export class Orchestrator {
 				this.emit({ type: "error", agentName: config.name, message: agentState.errorMessage ?? "Unknown error" });
 			}
 		}
+	}
+
+	/** Build system prompt for an agent dynamically, reflecting current participants. */
+	private buildPromptForAgent(agentName: string): string {
+		const config = this.agentConfigs.get(agentName);
+		const label = config?.label ?? agentName;
+		const participants = [
+			...[...this.agentConfigs.values()].map((c) => c.label),
+			"Human (you)",
+		];
+		return buildAgentPrompt(this.cwd, agentName, label, participants);
 	}
 
 	async sendMessage(text: string): Promise<void> {
@@ -103,7 +118,16 @@ export class Orchestrator {
 				}
 			});
 
-			await this.agentManager.sendPrompt(agentName, contextBlocks);
+			// Prepend system prompt only on the agent's first message
+			const prompt: ContentBlock[] = [];
+			if (!this.promptSent.has(agentName)) {
+				const systemPrompt = this.buildPromptForAgent(agentName);
+				prompt.push({ type: "text" as const, text: `[system]: ${systemPrompt}` });
+				this.promptSent.add(agentName);
+			}
+			prompt.push(...contextBlocks);
+
+			await this.agentManager.sendPrompt(agentName, prompt);
 
 			unsubStream();
 
@@ -142,6 +166,7 @@ export class Orchestrator {
 	}
 
 	async addAgent(config: AgentConfig): Promise<void> {
+		this.agentConfigs.set(config.name, config);
 		const agentState = await this.agentManager.spawnAgent(config, this.cwd);
 		this.state.agents.set(config.name, agentState);
 	}
@@ -149,6 +174,7 @@ export class Orchestrator {
 	async removeAgent(name: string): Promise<void> {
 		await this.agentManager.killAgent(name);
 		this.state.agents.delete(name);
+		this.agentConfigs.delete(name);
 		this.mutedAgents.delete(name);
 	}
 
@@ -162,6 +188,12 @@ export class Orchestrator {
 
 	async stop(): Promise<void> {
 		await this.agentManager.killAll();
+		this.state.active = false;
+	}
+
+	/** Synchronous kill for signal handlers. */
+	killSync(): void {
+		this.agentManager.killAllSync();
 		this.state.active = false;
 	}
 

@@ -32,6 +32,7 @@ export interface StreamChunk {
 	agentName: string;
 	text: string;
 	done: boolean;
+	kind: "message" | "thought";
 }
 
 export const DEFAULT_AGENTS: Record<string, AgentConfig> = {
@@ -45,8 +46,14 @@ export const DEFAULT_AGENTS: Record<string, AgentConfig> = {
 	codex: {
 		name: "codex",
 		command: "codex-acp",
-		args: [],
-		env: { CODEX_CLI_AUTH_CREDENTIALS_STORE: "file" },
+		args: [
+			"-c", 'sandbox_permissions=["disk-full-read-access","disk-full-write-access","network-full-access"]',
+		],
+		env: {
+			CODEX_CLI_AUTH_CREDENTIALS_STORE: "file",
+			CODEX_HOME: `${process.env.HOME}/.codex`,
+			RUST_LOG: "debug",
+		},
 		color: "#10b981",
 		label: "Codex",
 	},
