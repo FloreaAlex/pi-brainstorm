@@ -235,6 +235,29 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 				return;
 			}
 
+			if (trimmed === "setup") {
+				const { runSetup } = await import("../setup/wizard.js");
+				await runSetup();
+				ctx.ui.notify("Setup complete. Restart brainstorm to use new config.", "info");
+				return;
+			}
+
+			if (trimmed === "doctor" || trimmed.startsWith("doctor")) {
+				const { runDoctor } = await import("../setup/doctor.js");
+				const json = trimmed.includes("--json");
+				await runDoctor({ json, cwd: ctx.cwd });
+				return;
+			}
+
+			if (trimmed === "config") {
+				const { loadMachineConfig, loadProjectConfig, mergeConfigs } = await import("../config.js");
+				const machine = loadMachineConfig();
+				const project = loadProjectConfig(ctx.cwd);
+				const merged = machine ? mergeConfigs(machine, project) : null;
+				ctx.ui.notify(merged ? JSON.stringify(merged, null, 2) : "No config found. Run /brainstorm setup", "info");
+				return;
+			}
+
 			if (trimmed.startsWith("add")) {
 				if (!isActive()) {
 					ctx.ui.notify("Not in brainstorm mode. Start one with /brainstorm first.", "warning");
