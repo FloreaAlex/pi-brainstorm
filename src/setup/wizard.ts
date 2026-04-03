@@ -59,7 +59,7 @@ function ensureSymlink(): void {
 		} else {
 			// Not a symlink (regular file or directory)
 			fail(`${SYMLINK_PATH} exists but is not a symlink. Remove it manually.`);
-			process.exit(1);
+			throw new Error("Cannot create symlink — path exists and is not a symlink");
 		}
 	}
 
@@ -81,7 +81,7 @@ export async function runSetup(): Promise<void> {
 	if (!piVersion) {
 		fail("Pi is not installed.");
 		log("  Install Pi first: https://github.com/mariozechner/pi-mono");
-		process.exit(1);
+		throw new Error("Pi is not installed");
 	}
 	ok(`Pi ${piVersion}`);
 	log("");

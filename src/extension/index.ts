@@ -237,8 +237,12 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 
 			if (trimmed === "setup") {
 				const { runSetup } = await import("../setup/wizard.js");
-				await runSetup();
-				ctx.ui.notify("Setup complete. Restart brainstorm to use new config.", "info");
+				try {
+					await runSetup();
+					ctx.ui.notify("Setup complete. Restart brainstorm to use new config.", "info");
+				} catch (err) {
+					ctx.ui.notify(`Setup failed: ${err instanceof Error ? err.message : String(err)}`, "error");
+				}
 				return;
 			}
 
