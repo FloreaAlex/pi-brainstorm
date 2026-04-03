@@ -45,9 +45,14 @@ const CLAUDE_SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", 
 /** Spinner frames — OpenAI style (rotating circle) */
 const OPENAI_SPINNER = ["◐", "◓", "◑", "◒"];
 
+/** Spinner frames — Gemini style (sparkle) */
+const GEMINI_SPINNER = ["✦", "✧", "✦", "✧", "✦", "⊹", "✧", "⊹"];
+
 /** Pick spinner frames based on agent name */
 function getSpinnerFrames(agentName: string): string[] {
-	if (agentName.toLowerCase().includes("codex")) return OPENAI_SPINNER;
+	const lower = agentName.toLowerCase();
+	if (lower.includes("codex")) return OPENAI_SPINNER;
+	if (lower.includes("gemini")) return GEMINI_SPINNER;
 	return CLAUDE_SPINNER;
 }
 
