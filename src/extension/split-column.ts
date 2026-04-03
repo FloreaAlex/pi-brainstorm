@@ -10,57 +10,81 @@ function padToWidth(line: string, targetWidth: number): string {
 }
 
 /**
- * SplitColumn component — renders two child components side by side.
+ * Minimum columns per child before falling back to vertical stacking.
+ */
+const MIN_COL_WIDTH = 10;
+
+/**
+ * SplitColumn component — renders child components side by side.
  *
- * When the available width is too narrow (< 10 columns per side),
- * it falls back to stacking the children vertically.
+ * Supports 2 or more children. When the available width is too narrow
+ * (< MIN_COL_WIDTH columns per child), it falls back to stacking vertically.
  */
 export class SplitColumn implements Component {
-	private left: Component;
-	private right: Component;
+	private children: Component[];
 	private gap: number;
 
-	constructor(left: Component, right: Component, gap = 1) {
-		this.left = left;
-		this.right = right;
-		this.gap = gap;
+	constructor(left: Component, right: Component, gap?: number);
+	constructor(children: Component[], gap?: number);
+	constructor(leftOrChildren: Component | Component[], rightOrGap?: Component | number, gap?: number) {
+		if (Array.isArray(leftOrChildren)) {
+			this.children = leftOrChildren;
+			this.gap = (typeof rightOrGap === "number" ? rightOrGap : gap) ?? 1;
+		} else {
+			this.children = [leftOrChildren, rightOrGap as Component];
+			this.gap = gap ?? 1;
+		}
 	}
 
 	setLeft(component: Component): void {
-		this.left = component;
+		this.children[0] = component;
 	}
 
 	setRight(component: Component): void {
-		this.right = component;
+		this.children[1] = component;
 	}
 
 	invalidate(): void {
-		this.left.invalidate();
-		this.right.invalidate();
+		for (const child of this.children) child.invalidate();
 	}
 
 	render(width: number): string[] {
-		const colWidth = Math.floor((width - this.gap) / 2);
-		if (colWidth < 10) {
+		const n = this.children.length;
+		if (n === 0) return [];
+		if (n === 1) return this.children[0].render(width);
+
+		const totalGap = this.gap * (n - 1);
+		const colWidth = Math.floor((width - totalGap) / n);
+
+		if (colWidth < MIN_COL_WIDTH) {
 			// Too narrow — stack vertically
-			return [...this.left.render(width), ...this.right.render(width)];
+			const lines: string[] = [];
+			for (const child of this.children) {
+				lines.push(...child.render(width));
+			}
+			return lines;
 		}
 
-		const rightColWidth = width - colWidth - this.gap;
-		const leftLines = this.left.render(colWidth);
-		const rightLines = this.right.render(rightColWidth);
-		const maxLines = Math.max(leftLines.length, rightLines.length);
+		// Last column gets any remaining pixels
+		const lastColWidth = width - colWidth * (n - 1) - totalGap;
 		const gapStr = " ".repeat(this.gap);
+
+		// Render all children
+		const rendered = this.children.map((child, i) =>
+			child.render(i === n - 1 ? lastColWidth : colWidth),
+		);
+
+		const maxLines = Math.max(...rendered.map((r) => r.length));
 		const result: string[] = [];
 
-		for (let i = 0; i < maxLines; i++) {
-			const l = i < leftLines.length ? leftLines[i] : "";
-			const r = i < rightLines.length ? rightLines[i] : "";
-
-			const lPadded = padToWidth(l, colWidth);
-			const rPadded = padToWidth(r, rightColWidth);
-
-			result.push(lPadded + gapStr + rPadded);
+		for (let row = 0; row < maxLines; row++) {
+			const parts: string[] = [];
+			for (let col = 0; col < n; col++) {
+				const w = col === n - 1 ? lastColWidth : colWidth;
+				const line = row < rendered[col].length ? rendered[col][row] : "";
+				parts.push(padToWidth(line, w));
+			}
+			result.push(parts.join(gapStr));
 		}
 
 		return result;

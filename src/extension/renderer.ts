@@ -354,8 +354,11 @@ export class BrainstormRenderer {
 		this.container.addChild(spacer);
 
 		const termWidth = process.stdout.columns ?? 80;
-		if (blocks.length === 2 && termWidth >= MIN_SIDE_BY_SIDE_WIDTH) {
-			const split = new SplitColumn(blocks[0], blocks[1], 2);
+		const minWidthPerAgent = Math.floor(MIN_SIDE_BY_SIDE_WIDTH / 2);
+		const canFitSideBySide = blocks.length >= 2 && termWidth >= blocks.length * minWidthPerAgent;
+
+		if (canFitSideBySide) {
+			const split = new SplitColumn(blocks, 2);
 			this.splitComponent = split;
 			this.managedChildren.push(split);
 			this.container.addChild(split);
