@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentManager } from "../src/agents.js";
-import { Orchestrator, type OrchestratorEvent, parseMentions } from "../src/orchestrator.js";
-import type { AgentConfig, AgentState } from "../src/types.js";
+import type { AgentManager } from "../src/extension/agents.js";
+import { Orchestrator, type OrchestratorEvent, parseMentions } from "../src/extension/orchestrator.js";
+import type { AgentConfig, AgentState } from "../src/extension/types.js";
 
 // ---------------------------------------------------------------------------
 // Helpers

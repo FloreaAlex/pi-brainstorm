@@ -4,7 +4,7 @@
 	"description": "Multi-agent brainstorming extension for pi coding-agent via ACP",
 	"type": "module",
 	"pi": {
-		"extensions": ["dist/index.js"]
+		"extensions": ["dist/extension/index.js"]
 	},
 	"scripts": {
 		"build": "tsc && cp src/PROMPT.md src/AUTO_PROMPT.md dist/",

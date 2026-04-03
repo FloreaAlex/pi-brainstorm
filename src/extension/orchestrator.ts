@@ -1,6 +1,6 @@
 import type { ContentBlock } from "@agentclientprotocol/sdk";
 import { AgentManager } from "./agents.js";
-import { buildAgentPrompt, buildAutoPrompt } from "./prompt.js";
+import { buildAgentPrompt, buildAutoPrompt } from "../prompt.js";
 import type { AgentConfig, AutoModeState, BrainstormMessage, BrainstormState, StreamChunk } from "./types.js";
 
 export type OrchestratorEvent =

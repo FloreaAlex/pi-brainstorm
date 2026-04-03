@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
-import { type AgentConnection, AgentManager } from "../src/agents.js";
-import type { AgentConfig, AgentState, StreamChunk } from "../src/types.js";
+import { type AgentConnection, AgentManager } from "../src/extension/agents.js";
+import type { AgentConfig, AgentState, StreamChunk } from "../src/extension/types.js";
 
 // ---------------------------------------------------------------------------
 // Helpers

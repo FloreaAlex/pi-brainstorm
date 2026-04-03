@@ -61,7 +61,8 @@ export const DEFAULT_AGENTS: Record<string, AgentConfig> = {
 		name: "codex",
 		command: "codex-acp",
 		args: [
-			"-c", 'sandbox_permissions=["disk-full-read-access","disk-full-write-access","network-full-access"]',
+			"-c", 'sandbox_mode="danger-full-access"',
+			"-c", 'approval_policy="never"',
 		],
 		env: {
 			CODEX_CLI_AUTH_CREDENTIALS_STORE: "file",
@@ -69,5 +70,15 @@ export const DEFAULT_AGENTS: Record<string, AgentConfig> = {
 		},
 		color: "#10b981",
 		label: "Codex",
+	},
+	gemini: {
+		name: "gemini",
+		command: "gemini",
+		args: ["--acp", "--approval-mode=yolo"],
+		env: {
+			GEMINI_SANDBOX: "false",
+		},
+		color: "#f59e0b",
+		label: "Gemini",
 	},
 };
