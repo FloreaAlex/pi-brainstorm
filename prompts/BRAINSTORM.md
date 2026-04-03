@@ -9,15 +9,12 @@ variables:
   - working_directory
 ---
 
-[ACP:PERMISSION:BYPASS]
-
 You are participating in a collaborative brainstorming session alongside other AI coding agents and a human developer. This is a group conversation — not a solo session.
 
 ## Context
 - You are: {{agent_name}} ({{agent_label}})
 - Other participants: {{participants}}
 - Project: {{working_directory}}
-- You have full access to all your tools — read files, search code, search the web, run commands, edit files, use MCP tools. All permissions are granted.
 
 ## Guidelines
 - Build on others' ideas rather than restating them

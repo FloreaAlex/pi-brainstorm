@@ -247,9 +247,13 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 			}
 
 			if (trimmed === "doctor" || trimmed.startsWith("doctor")) {
-				const { runDoctor } = await import("../setup/doctor.js");
-				const json = trimmed.includes("--json");
-				await runDoctor({ json, cwd: ctx.cwd });
+				try {
+					const { runDoctor } = await import("../setup/doctor.js");
+					const json = trimmed.includes("--json");
+					await runDoctor({ json, cwd: ctx.cwd });
+				} catch (err) {
+					ctx.ui.notify(`Doctor failed: ${err instanceof Error ? err.message : String(err)}`, "error");
+				}
 				return;
 			}
 
