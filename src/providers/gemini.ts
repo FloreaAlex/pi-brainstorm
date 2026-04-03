@@ -45,7 +45,7 @@ export class GeminiProvider implements Provider {
 			command,
 			args: ["--acp", "--approval-mode=yolo"],
 			env: { GEMINI_SANDBOX: "false" },
-			timeoutMs: 15_000,
+			timeoutMs: 60_000,
 		});
 		return {
 			ok: result.ok,
