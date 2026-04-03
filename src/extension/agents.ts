@@ -222,6 +222,25 @@ export class AgentManager {
 				}
 			}
 
+			// Read back actual session values from ACP config options
+			state.sessionInfo = {};
+			try {
+				const configOpts = session.configOptions ?? [];
+				for (const opt of configOpts as any[]) {
+					if (opt.category === "model") {
+						state.sessionInfo.model = opt.currentValue ?? undefined;
+					} else if (opt.category === "thought_level") {
+						state.sessionInfo.thoughtLevel = opt.currentValue ?? undefined;
+					} else if (opt.category === "context_window" || opt.id === "context_window") {
+						state.sessionInfo.contextWindow = typeof opt.currentValue === "number"
+							? opt.currentValue
+							: parseInt(opt.currentValue, 10) || undefined;
+					}
+				}
+			} catch {
+				// Config options not readable
+			}
+
 			state.status = "active";
 			state.sessionId = session.sessionId;
 

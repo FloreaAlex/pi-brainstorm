@@ -11,11 +11,20 @@ export interface AgentConfig {
 	preferredModel?: string;
 }
 
+/** Actual runtime info read back from ACP session after setup. */
+export interface AgentSessionInfo {
+	model?: string;
+	thoughtLevel?: string;
+	contextWindow?: number;
+}
+
 export interface AgentState {
 	config: AgentConfig;
 	status: "connecting" | "active" | "muted" | "disconnected" | "error";
 	sessionId?: SessionId;
 	errorMessage?: string;
+	/** Actual runtime values from ACP, not just config preferences. */
+	sessionInfo?: AgentSessionInfo;
 }
 
 export interface BrainstormMessage {

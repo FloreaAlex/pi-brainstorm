@@ -79,10 +79,12 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 		const names = agentNames().map((n) => {
 			const state = orchestrator?.getState().agents.get(n);
 			const color = state?.config.color;
-			const model = state?.config.preferredModel;
+			const info = state?.sessionInfo;
 			const nameStr = color ? chalk.hex(color)(n) : n;
+
+			// Show actual model from ACP session, fall back to config preference
+			const model = info?.model ?? state?.config.preferredModel;
 			if (model) {
-				// Shorten model name: "claude-opus-4-6" → "opus-4-6", "gemini-3.1-pro" → "3.1-pro"
 				const short = model.replace(/^claude-/, "").replace(/^gemini-/, "").replace(/^gpt-/, "");
 				return `${nameStr}${chalk.dim(":")}${chalk.dim(short)}`;
 			}
@@ -386,7 +388,12 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 			const state = orchestrator!.getState();
 			const lines: string[] = [];
 			for (const [name, agentState] of state.agents) {
-				lines.push(`${agentState.config.label} (${name}): ${agentState.status}`);
+				const info = agentState.sessionInfo;
+				const parts = [`${agentState.config.label} (${name}): ${agentState.status}`];
+				if (info?.model) parts.push(`model: ${info.model}`);
+				if (info?.thoughtLevel) parts.push(`thinking: ${info.thoughtLevel}`);
+				if (info?.contextWindow) parts.push(`ctx: ${(info.contextWindow / 1000).toFixed(0)}k`);
+				lines.push(parts.join(" | "));
 			}
 
 			ctx.ui.notify(lines.join("\n"), "info");
