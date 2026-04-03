@@ -43,8 +43,9 @@ export class GeminiProvider implements Provider {
 		const checkedAt = new Date().toISOString();
 		const result = await acpSmokeTest({
 			command,
-			args: ["--acp"],
-			env: {},
+			args: ["--acp", "--approval-mode=yolo"],
+			env: { GEMINI_SANDBOX: "false" },
+			timeoutMs: 15_000,
 		});
 		return {
 			ok: result.ok,

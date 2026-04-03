@@ -54,7 +54,12 @@ export class AgentManager {
 			const origConsoleError = console.error;
 			console.error = (...args: unknown[]) => {
 				const msg = String(args[0] ?? "");
-				if (msg.includes("Error handling notification") || msg.includes("Invalid params")) return;
+				if (
+					msg.includes("Error handling notification") ||
+					msg.includes("Invalid params") ||
+					msg.includes("Failed to parse JSON") ||
+					msg.includes("is not valid JSON")
+				) return;
 				origConsoleError(...args);
 			};
 

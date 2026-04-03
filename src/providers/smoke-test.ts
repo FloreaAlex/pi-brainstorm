@@ -24,11 +24,16 @@ export async function acpSmokeTest(options: SmokeTestOptions): Promise<{ ok: boo
 		const output = Readable.toWeb(proc.stdout!) as ReadableStream<Uint8Array>;
 		const stream = acp.ndJsonStream(input, output);
 
-		// Suppress ACP SDK validation noise
+		// Suppress ACP SDK noise (validation errors, non-JSON debug lines from bridges)
 		const origErr = console.error;
 		console.error = (...a: unknown[]) => {
 			const msg = String(a[0] ?? "");
-			if (msg.includes("Error handling notification") || msg.includes("Invalid params")) return;
+			if (
+				msg.includes("Error handling notification") ||
+				msg.includes("Invalid params") ||
+				msg.includes("Failed to parse JSON") ||
+				msg.includes("is not valid JSON")
+			) return;
 			origErr(...a);
 		};
 
