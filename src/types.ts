@@ -7,6 +7,8 @@ export interface AgentConfig {
 	env?: Record<string, string>;
 	color: string;
 	label: string;
+	/** Preferred model ID — set via ACP config option if the agent exposes a model selector. */
+	preferredModel?: string;
 }
 
 export interface AgentState {

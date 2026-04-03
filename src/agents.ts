@@ -155,13 +155,71 @@ export class AgentManager {
 
 			// Also set via config option if available (some bridges read this differently)
 			try {
-				await connection.setSessionConfigOption({
-					sessionId: session.sessionId,
-					optionId: "mode",
-					value: "bypassPermissions",
-				});
+				const modeOption = session.configOptions?.find(
+					(o: any) => o.category === "mode" && o.type === "select",
+				);
+				if (modeOption) {
+					await connection.setSessionConfigOption({
+						sessionId: session.sessionId,
+						configId: modeOption.id,
+						value: "bypassPermissions",
+					});
+				}
 			} catch {
 				// Config option not supported
+			}
+
+			// Set highest reasoning/thinking level — brainstorming benefits from max effort
+			try {
+				const thoughtOption = session.configOptions?.find(
+					(o: any) => o.category === "thought_level" && o.type === "select",
+				);
+				if (thoughtOption) {
+					const opts = ((thoughtOption as any).options ?? []) as any[];
+					// Flatten grouped options if needed
+					const flat = opts.flatMap((o: any) => (o.group != null ? o.options : [o]));
+					if (flat.length > 0) {
+						// Last option is typically highest reasoning effort
+						const highest = flat[flat.length - 1];
+						if (highest.value !== (thoughtOption as any).currentValue) {
+							await connection.setSessionConfigOption({
+								sessionId: session.sessionId,
+								configId: (thoughtOption as any).id,
+								value: highest.value,
+							});
+						}
+					}
+				}
+			} catch {
+				// thought_level not supported by this agent
+			}
+
+			// Set preferred model if specified in config
+			if (config.preferredModel) {
+				try {
+					const modelOption = session.configOptions?.find(
+						(o: any) => o.category === "model" && o.type === "select",
+					);
+					if (modelOption) {
+						const opts = ((modelOption as any).options ?? []) as any[];
+						const flat = opts.flatMap((o: any) => (o.group != null ? o.options : [o]));
+						// Look for exact match or substring match on the preferred model
+						const preferred = config.preferredModel.toLowerCase();
+						const match = flat.find((o: any) =>
+							o.value?.toLowerCase() === preferred ||
+							o.value?.toLowerCase().includes(preferred),
+						);
+						if (match && match.value !== (modelOption as any).currentValue) {
+							await connection.setSessionConfigOption({
+								sessionId: session.sessionId,
+								configId: (modelOption as any).id,
+								value: match.value,
+							});
+						}
+					}
+				} catch {
+					// Model selection not supported by this agent
+				}
 			}
 
 			state.status = "active";

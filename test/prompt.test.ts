@@ -21,3 +21,4 @@ describe("prompt template", () => {
 		expect(result).toBe("Hello Claude {{unknown}}");
 	});
 });
+

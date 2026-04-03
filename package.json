@@ -18,10 +18,10 @@
 		"strip-ansi": "^7.1.0"
 	},
 	"peerDependencies": {
-		"@mariozechner/pi-coding-agent": ">=0.62.0",
-		"@mariozechner/pi-tui": ">=0.62.0",
-		"@mariozechner/pi-ai": ">=0.62.0",
-		"@mariozechner/pi-agent-core": ">=0.62.0"
+		"@mariozechner/pi-coding-agent": ">=0.64.0",
+		"@mariozechner/pi-tui": ">=0.64.0",
+		"@mariozechner/pi-ai": ">=0.64.0",
+		"@mariozechner/pi-agent-core": ">=0.64.0"
 	},
 	"devDependencies": {
 		"typescript": "^5.9.2",

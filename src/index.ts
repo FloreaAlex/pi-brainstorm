@@ -116,6 +116,8 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 				case "done":
 					renderer.onAgentDone(event.agentName);
 					ctx.ui.setStatus("brainstorm", statusText());
+					// Save after each agent response so state survives unexpected exits
+					if (sessionCwd && orchestrator) saveState(sessionCwd, orchestrator.toJSON());
 					break;
 				case "all_done":
 					renderer.collapseSplitView();
@@ -152,6 +154,7 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 					ctx.ui.setStatus("brainstorm", statusText());
 					if (sessionCwd && orchestrator) saveState(sessionCwd, orchestrator.toJSON());
 					break;
+
 			}
 		});
 
@@ -183,7 +186,7 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 
 	async function stopSession(ctx: ExtensionContext): Promise<void> {
 		if (!isActive()) {
-			ctx.ui.notify("No active brainstorm session.", "warning");
+			ctx.ui.notify("Not in brainstorm mode. Start one with /brainstorm first.", "warning");
 			return;
 		}
 
@@ -227,6 +230,34 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 
 			if (trimmed === "stop") {
 				await stopSession(ctx);
+				return;
+			}
+
+			if (trimmed.startsWith("add")) {
+				if (!isActive()) {
+					ctx.ui.notify("Not in brainstorm mode. Start one with /brainstorm first.", "warning");
+					return;
+				}
+				const name = trimmed.slice(3).trim();
+				if (!name) {
+					ctx.ui.notify(`Usage: /brainstorm add <agent-name>. Available: ${Object.keys(DEFAULT_AGENTS).join(", ")}`, "warning");
+					return;
+				}
+				if (orchestrator!.getState().agents.has(name)) {
+					ctx.ui.notify(`Agent already in session: ${name}`, "warning");
+					return;
+				}
+				const addConfig = DEFAULT_AGENTS[name];
+				if (!addConfig) {
+					ctx.ui.notify(`Unknown agent: ${name}. Available: ${Object.keys(DEFAULT_AGENTS).join(", ")}`, "warning");
+					return;
+				}
+				renderer?.registerAgent(addConfig);
+				renderer?.addSystemMessage(`${addConfig.label} joined the session`);
+				ctx.ui.setStatus("brainstorm", statusText("connecting..."));
+				await orchestrator!.addAgent(addConfig);
+				ctx.ui.setStatus("brainstorm", statusText());
+				ctx.ui.notify(`Added agent: ${addConfig.label}`, "info");
 				return;
 			}
 
@@ -302,7 +333,7 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 		description: "List brainstorm agent status",
 		handler: async (_args: string, ctx: ExtensionCommandContext) => {
 			if (!isActive()) {
-				ctx.ui.notify("No active brainstorm session.", "warning");
+				ctx.ui.notify("Not in brainstorm mode. Start one with /brainstorm first.", "warning");
 				return;
 			}
 
@@ -320,7 +351,7 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 		description: "Mute a brainstorm agent",
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
 			if (!isActive()) {
-				ctx.ui.notify("No active brainstorm session.", "warning");
+				ctx.ui.notify("Not in brainstorm mode. Start one with /brainstorm first.", "warning");
 				return;
 			}
 
@@ -344,7 +375,7 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 		description: "Unmute a brainstorm agent",
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
 			if (!isActive()) {
-				ctx.ui.notify("No active brainstorm session.", "warning");
+				ctx.ui.notify("Not in brainstorm mode. Start one with /brainstorm first.", "warning");
 				return;
 			}
 
@@ -368,7 +399,7 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 		description: "Restart a brainstorm agent",
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
 			if (!isActive()) {
-				ctx.ui.notify("No active brainstorm session.", "warning");
+				ctx.ui.notify("Not in brainstorm mode. Start one with /brainstorm first.", "warning");
 				return;
 			}
 
@@ -394,7 +425,7 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 		description: "Interrupt all running agents",
 		handler: async (_args: string, ctx: ExtensionCommandContext) => {
 			if (!isActive()) {
-				ctx.ui.notify("No active brainstorm session.", "warning");
+				ctx.ui.notify("Not in brainstorm mode. Start one with /brainstorm first.", "warning");
 				return;
 			}
 			await orchestrator!.cancelAll();
@@ -408,7 +439,7 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 		description: "Start autonomous agent discussion",
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
 			if (!isActive()) {
-				ctx.ui.notify("No active brainstorm session.", "warning");
+				ctx.ui.notify("Not in brainstorm mode. Start one with /brainstorm first.", "warning");
 				return;
 			}
 

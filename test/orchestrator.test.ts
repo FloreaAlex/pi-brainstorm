@@ -32,6 +32,7 @@ function createMockAgentManager(): AgentManager {
 		spawnAgent: vi.fn(async (config: AgentConfig) => makeAgentState(config.name)),
 		sendPrompt: vi.fn(async () => undefined),
 		cancelAgent: vi.fn(async () => {}),
+		cancelAll: vi.fn(async () => {}),
 		killAgent: vi.fn(async () => {}),
 		killAll: vi.fn(async () => {}),
 		getAgent: vi.fn(() => undefined),
@@ -331,4 +332,5 @@ describe("Orchestrator", () => {
 			expect(mockManager.killAgent).not.toHaveBeenCalled();
 		});
 	});
+
 });

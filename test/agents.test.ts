@@ -253,7 +253,7 @@ describe("AgentManager", () => {
 				prompt: [{ type: "text", text: "hello" }],
 			});
 			// Should emit a done chunk after prompt completes
-			expect(streamChunks).toEqual([{ agentName: "talker", text: "", done: true }]);
+			expect(streamChunks).toEqual([{ agentName: "talker", text: "", done: true, kind: "message" }]);
 		});
 
 		it("sets error status and returns undefined when prompt throws", async () => {
@@ -270,7 +270,7 @@ describe("AgentManager", () => {
 			expect(conn.state.status).toBe("error");
 			expect(conn.state.errorMessage).toBe("boom");
 			// Should still emit done chunk
-			expect(streamChunks).toEqual([{ agentName: "failing", text: "", done: true }]);
+			expect(streamChunks).toEqual([{ agentName: "failing", text: "", done: true, kind: "message" }]);
 		});
 	});
 

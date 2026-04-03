@@ -5,6 +5,8 @@ import {
 	type MarkdownTheme,
 	Spacer,
 	Text,
+	truncateToWidth,
+	visibleWidth,
 } from "@mariozechner/pi-tui";
 import chalk from "chalk";
 import { SplitColumn } from "./split-column.js";
@@ -171,7 +173,8 @@ export class AgentBlock implements Component {
 		const headerText = this.streaming
 			? ` ${this.spinnerFrames[this.spinnerIdx % this.spinnerFrames.length]} ${this.agentLabel} `
 			: ` ${this.agentLabel} `;
-		const topLineLen = Math.max(0, width - 2 - headerText.length);
+		const headerVisWidth = visibleWidth(headerText);
+		const topLineLen = Math.max(0, width - 2 - headerVisWidth);
 		const topLeft = Math.floor(topLineLen / 4);
 		const topRight = topLineLen - topLeft;
 		result.push(colorFn("\u256D" + "─".repeat(topLeft)) + labelColor(chalk.bold(headerText)) + colorFn("─".repeat(topRight) + "\u256E"));
@@ -205,7 +208,8 @@ export class AgentBlock implements Component {
 		// Bottom border: ╰───────────╯
 		result.push(colorFn(`\u2570${"─".repeat(Math.max(0, width - 2))}\u256F`));
 
-		return result;
+		// Safety: ensure no line exceeds the given width
+		return result.map((line) => truncateToWidth(line, width, "", true));
 	}
 
 	private updateHeader(): void {
@@ -258,7 +262,12 @@ export class SystemMessage implements Component {
 
 	render(width: number): string[] {
 		const text = ` ${this.message} `;
-		const remaining = Math.max(0, width - text.length);
+		const textWidth = visibleWidth(text);
+		if (textWidth >= width) {
+			// Message too long — truncate with ellipsis and no separator dashes
+			return [truncateToWidth(chalk.dim(text), width, "… ", true)];
+		}
+		const remaining = width - textWidth;
 		const left = Math.floor(remaining / 2);
 		const right = remaining - left;
 		return [chalk.dim("─".repeat(left) + text + "─".repeat(right))];

@@ -119,7 +119,7 @@ export class Orchestrator {
 		const promises = respondingAgents.map(async (agentName) => {
 			const accumulated: string[] = [];
 			const unsubStream = this.agentManager.onStream((chunk) => {
-				if (chunk.agentName === agentName && !chunk.done) {
+				if (chunk.agentName === agentName && !chunk.done && chunk.kind === "message") {
 					accumulated.push(chunk.text);
 				}
 			});
@@ -300,7 +300,7 @@ export class Orchestrator {
 			// Send to single agent sequentially
 			const accumulated: string[] = [];
 			const unsubStream = this.agentManager.onStream((chunk) => {
-				if (chunk.agentName === agentName && !chunk.done) {
+				if (chunk.agentName === agentName && !chunk.done && chunk.kind === "message") {
 					accumulated.push(chunk.text);
 				}
 			});
@@ -353,7 +353,7 @@ export class Orchestrator {
 
 				const accumulated: string[] = [];
 				const unsubStream = this.agentManager.onStream((chunk) => {
-					if (chunk.agentName === summaryAgent && !chunk.done) {
+					if (chunk.agentName === summaryAgent && !chunk.done && chunk.kind === "message") {
 						accumulated.push(chunk.text);
 					}
 				});
