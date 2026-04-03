@@ -390,17 +390,15 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 			}
 
 			const state = orchestrator!.getState();
-			const lines: string[] = [];
 			for (const [name, agentState] of state.agents) {
 				const info = agentState.sessionInfo;
 				const parts = [`${agentState.config.label} (${name}): ${agentState.status}`];
 				if (info?.model) parts.push(`model: ${info.model}`);
 				if (info?.thoughtLevel) parts.push(`thinking: ${info.thoughtLevel}`);
 				if (info?.contextWindow) parts.push(`ctx: ${(info.contextWindow / 1000).toFixed(0)}k`);
-				lines.push(parts.join(" | "));
+				renderer?.addSystemMessage(parts.join(" | "));
 			}
-
-			ctx.ui.notify(lines.join("\n"), "info");
+			sessionUi?.setStatus("brainstorm", statusText());
 		},
 	});
 
