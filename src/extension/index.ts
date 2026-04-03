@@ -17,7 +17,8 @@ import { join } from "node:path";
 import chalk from "chalk";
 import { Orchestrator, parseMentions } from "./orchestrator.js";
 import { BrainstormRenderer } from "./renderer.js";
-import { type AgentConfig, DEFAULT_AGENTS } from "./types.js";
+import type { AgentConfig } from "./types.js";
+import { resolveAgentConfigs } from "../config.js";
 
 /** Persist brainstorm state to a file so it survives pi crashes. */
 function getStateFilePath(cwd: string): string {
@@ -76,8 +77,9 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 		const tokens = tokenLabel();
 		if (suffix) return `${label} ${chalk.dim(suffix)}${tokens}`;
 		const names = agentNames().map((n) => {
-			const config = DEFAULT_AGENTS[n];
-			return config ? chalk.hex(config.color)(n) : n;
+			const state = orchestrator?.getState().agents.get(n);
+			const color = state?.config.color;
+			return color ? chalk.hex(color)(n) : n;
 		});
 		return `${label} ${chalk.dim("[")}${names.join(chalk.dim(", "))}${chalk.dim("]")}${tokens}`;
 	}
@@ -240,16 +242,18 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 				}
 				const name = trimmed.slice(3).trim();
 				if (!name) {
-					ctx.ui.notify(`Usage: /brainstorm add <agent-name>. Available: ${Object.keys(DEFAULT_AGENTS).join(", ")}`, "warning");
+					const allConfigsForUsage = resolveAgentConfigs(ctx.cwd);
+					ctx.ui.notify(`Usage: /brainstorm add <agent-name>. Available: ${allConfigsForUsage.map((c) => c.name).join(", ")}`, "warning");
 					return;
 				}
 				if (orchestrator!.getState().agents.has(name)) {
 					ctx.ui.notify(`Agent already in session: ${name}`, "warning");
 					return;
 				}
-				const addConfig = DEFAULT_AGENTS[name];
+				const allConfigsForAdd = resolveAgentConfigs(ctx.cwd);
+				const addConfig = allConfigsForAdd.find((c) => c.name === name);
 				if (!addConfig) {
-					ctx.ui.notify(`Unknown agent: ${name}. Available: ${Object.keys(DEFAULT_AGENTS).join(", ")}`, "warning");
+					ctx.ui.notify(`Unknown agent: ${name}. Available: ${allConfigsForAdd.map((c) => c.name).join(", ")}`, "warning");
 					return;
 				}
 				renderer?.registerAgent(addConfig);
@@ -273,9 +277,10 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 					return;
 				}
 
+				const allConfigsForResume = resolveAgentConfigs(ctx.cwd);
 				const configs: AgentConfig[] = [];
 				for (const agentName of Object.values(saved.agents)) {
-					const config = DEFAULT_AGENTS[agentName];
+					const config = allConfigsForResume.find((c) => c.name === agentName);
 					if (config) configs.push(config);
 				}
 
@@ -305,24 +310,27 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 			}
 
 			// Resolve agent configs. Accept space-separated agent names or use defaults.
+			const allConfigs = resolveAgentConfigs(ctx.cwd);
+			const availableNames = allConfigs.map((c) => c.name);
+
 			let configs: AgentConfig[];
 			if (trimmed) {
 				const requestedNames = trimmed.split(/\s+/);
 				configs = [];
 				for (const name of requestedNames) {
-					const config = DEFAULT_AGENTS[name];
+					const config = allConfigs.find((c) => c.name === name);
 					if (config) {
 						configs.push(config);
 					} else {
 						ctx.ui.notify(
-							`Unknown agent: ${name}. Available: ${Object.keys(DEFAULT_AGENTS).join(", ")}`,
+							`Unknown agent: ${name}. Available: ${availableNames.join(", ")}`,
 							"warning",
 						);
 					}
 				}
 				if (configs.length === 0) return;
 			} else {
-				configs = Object.values(DEFAULT_AGENTS);
+				configs = allConfigs;
 			}
 
 			await startSession(ctx, configs);
