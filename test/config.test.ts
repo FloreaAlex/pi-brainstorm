@@ -183,7 +183,8 @@ describe("writeMachineConfig", () => {
 describe("resolveAgentConfigs", () => {
 	it("returns configs for all supported-platform providers when no machine config exists", () => {
 		const dir = makeTmpDir();
-		const configs = resolveAgentConfigs(dir);
+		const noConfigDir = makeTmpDir();
+		const configs = resolveAgentConfigs(dir, noConfigDir);
 
 		// Should have entries for providers that support current platform
 		expect(configs.length).toBeGreaterThan(0);

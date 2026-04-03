@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execSync } from "node:child_process";
 import { existsSync, lstatSync, readlinkSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
@@ -68,7 +68,7 @@ export async function runDoctor(options?: { json?: boolean; cwd?: string }): Pro
 
 function checkPiVersion(): DoctorCheck {
 	try {
-		const version = execFileSync("pi", ["--version"], { encoding: "utf-8", timeout: 10_000 }).trim();
+		const version = execSync("pi --version 2>&1", { encoding: "utf-8", timeout: 10_000 }).trim();
 		return { name: "pi", status: "ok", message: `Pi ${version}` };
 	} catch {
 		return { name: "pi", status: "fail", message: "Pi not found", detail: "'pi --version' failed or pi is not in PATH" };

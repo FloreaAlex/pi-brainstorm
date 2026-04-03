@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execSync } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, readlinkSync, symlinkSync, unlinkSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
@@ -37,8 +37,8 @@ async function prompt(question: string): Promise<string> {
 
 function checkPi(): string | null {
 	try {
-		const version = execFileSync("pi", ["--version"], { encoding: "utf-8" }).trim();
-		return version;
+		const version = execSync("pi --version 2>&1", { encoding: "utf-8" }).trim();
+		return version || null;
 	} catch {
 		return null;
 	}

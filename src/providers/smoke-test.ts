@@ -72,7 +72,15 @@ export async function acpSmokeTest(options: SmokeTestOptions): Promise<{ ok: boo
 		console.error = origErr;
 		return { ok: true };
 	} catch (err) {
-		return { ok: false, error: err instanceof Error ? err.message : String(err) };
+		let message: string;
+		if (err instanceof Error) {
+			message = err.message;
+		} else if (typeof err === "string") {
+			message = err;
+		} else {
+			try { message = JSON.stringify(err); } catch { message = "Unknown error"; }
+		}
+		return { ok: false, error: message };
 	} finally {
 		if (proc && proc.exitCode === null) {
 			proc.kill();
