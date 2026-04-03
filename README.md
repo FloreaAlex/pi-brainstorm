@@ -100,6 +100,12 @@ node dist/cli.js doctor --json
 
 ## Troubleshooting
 
+- **Setup says agent "not found" but it's installed**: If you use nvm, agents are installed per Node version. Make sure you install agents with the same Node version you use day-to-day:
+  ```bash
+  nvm use 22  # or whichever version you use
+  npm install -g @agentclientprotocol/claude-agent-acp @google/gemini-cli
+  npm run setup
+  ```
 - **Agent won't start**: Run `npm run doctor` to check command resolution and auth
 - **Permission denied**: Check `~/.claude/settings.json` has `"permissions": { "defaultMode": "bypassPermissions" }` for Claude
 - **Codex keychain popup**: Ensure `CODEX_CLI_AUTH_CREDENTIALS_STORE=file` is set (handled by setup)
