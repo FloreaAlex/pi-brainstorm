@@ -1,8 +1,8 @@
-import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentUserConfig, AuthResult, Provider, ProviderPermissions, ResolvedCommand, SpawnConfig } from "./types.js";
 import { acpSmokeTest } from "./smoke-test.js";
+import { findOnPath } from "./resolve.js";
 
 const COMMAND = "codex-acp";
 
@@ -31,7 +31,7 @@ export class CodexProvider implements Provider {
 
 		// Check PATH
 		try {
-			const resolved = execSync(`which ${COMMAND} 2>/dev/null`, { encoding: "utf-8" }).trim();
+			const resolved = findOnPath(COMMAND);
 			if (resolved) {
 				return { path: resolved, source: "path" };
 			}

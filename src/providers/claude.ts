@@ -1,8 +1,8 @@
-import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentUserConfig, AuthResult, Provider, ProviderPermissions, ResolvedCommand, SpawnConfig } from "./types.js";
 import { acpSmokeTest } from "./smoke-test.js";
+import { findOnPath } from "./resolve.js";
 
 const PRIMARY_COMMAND = "claude-agent-acp";
 const VARIANT_COMMANDS = ["claude-code-acp"];
@@ -29,14 +29,14 @@ export class ClaudeProvider implements Provider {
 		}
 
 		// 2. Check PATH for primary command
-		const primaryPath = this.whichSync(PRIMARY_COMMAND);
+		const primaryPath = findOnPath(PRIMARY_COMMAND);
 		if (primaryPath) {
 			return { path: primaryPath, source: "path" };
 		}
 
 		// 3. Check PATH for variant commands
 		for (const variant of VARIANT_COMMANDS) {
-			const variantPath = this.whichSync(variant);
+			const variantPath = findOnPath(variant);
 			if (variantPath) {
 				return { path: variantPath, source: "variant" };
 			}
@@ -109,11 +109,4 @@ export class ClaudeProvider implements Provider {
 		};
 	}
 
-	private whichSync(cmd: string): string | null {
-		try {
-			return execSync(`which ${cmd} 2>/dev/null`, { encoding: "utf-8" }).trim() || null;
-		} catch {
-			return null;
-		}
-	}
 }
