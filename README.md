@@ -1,198 +1,114 @@
 # pi-brainstorm
 
-A [pi](https://github.com/badlogic/pi-mono) extension for multi-agent brainstorming. Send a message and get responses from Claude and Codex simultaneously. Watch them debate, agree, and build on each other's ideas in real time.
-
-Uses the [Agent Client Protocol (ACP)](https://agentclientprotocol.com) to communicate with any ACP-compatible coding agent.
+Multi-agent brainstorming extension for [pi](https://github.com/mariozechner/pi-mono) coding-agent. Run collaborative AI discussions with Claude, Codex, and Gemini talking to each other.
 
 ## Prerequisites
 
-- [pi](https://github.com/badlogic/pi-mono) coding agent installed globally (`npm install -g @mariozechner/pi-coding-agent`)
+- [pi](https://github.com/mariozechner/pi-mono) (v0.64.0+)
 - Node.js 18+
-- At least one ACP bridge:
+- One or more agent CLIs:
+  - **Claude**: `npm install -g @agentclientprotocol/claude-agent-acp` + `claude login`
+  - **Codex**: `brew install zed-industries/codex-acp` + `codex auth`
+  - **Gemini**: `npm install -g @google/gemini-cli` + `gemini auth`
 
-| Agent | Bridge | Install |
-|-------|--------|---------|
-| Claude Code | [claude-agent-acp](https://github.com/zed-industries/claude-agent-acp) | `npm install -g @zed-industries/claude-agent-acp` |
-| Codex | [codex-acp](https://github.com/zed-industries/codex-acp) | `brew install codex-acp` |
-
-Both agents must be authenticated separately (Claude via `claude` CLI, Codex via `codex` CLI).
-
-## Install
+## Setup
 
 ```bash
-git clone https://github.com/FloreaAlex/pi-brainstorm.git
+git clone <repo-url>
 cd pi-brainstorm
 npm install
-npm run build
-
-# Link as a global pi extension
-mkdir -p ~/.pi/agent/extensions
-ln -sf "$(pwd)" ~/.pi/agent/extensions/pi-brainstorm
+npm run setup
 ```
+
+Setup will:
+1. Build the project
+2. Symlink the extension into `~/.pi/agent/extensions/`
+3. Detect installed providers
+4. Run auth smoke tests
+5. Write machine config to `~/.pi/brainstorm/config.json`
+
+Re-run `npm run setup` after `git pull` or when adding new providers.
 
 ## Usage
 
-Start pi in any project directory, then:
+Start pi in any project, then:
 
-```
-/brainstorm
-```
-
-Both agents spawn and you're in a 3-way conversation.
-
-### Commands
-
-| Command | Description |
-|---------|-------------|
-| `/brainstorm` | Start a brainstorm session with all configured agents |
-| `/brainstorm stop` | End the session and kill agent processes |
-| `/brainstorm resume` | Resume a previous session (replays full conversation history) |
-| `@claude <message>` | Direct a message to Claude only (Codex still sees the history) |
-| `@codex <message>` | Direct a message to Codex only |
-| `/mute <agent>` | Mute an agent (it stops responding but still sees messages) |
+| Command | Purpose |
+|---------|---------|
+| `/brainstorm` | Start a session with all detected agents |
+| `/brainstorm claude codex` | Start with specific agents |
+| `/brainstorm stop` | End the session |
+| `/brainstorm resume` | Resume a previous session |
+| `/brainstorm setup` | Re-run setup from within pi |
+| `/brainstorm doctor` | Run diagnostics |
+| `/brainstorm config` | Print resolved config |
+| `/auto [turns] [topic]` | Start autonomous discussion |
+| `/auto continue [turns]` | Continue autonomous discussion |
+| `/mute <agent>` | Mute an agent |
 | `/unmute <agent>` | Unmute an agent |
-| `/agents` | List active agents and their status |
-| `/restart <agent>` | Kill and re-spawn an agent |
-| `/stop` | Interrupt all agents mid-response |
-| `/auto [turns] [topic]` | Start autonomous discussion (agents talk to each other) |
-| `/auto continue [turns] [message]` | Continue auto discussion, optionally inject a steering message |
+| `/restart <agent>` | Restart an agent |
+| `/stop` | Interrupt all agents |
+| `/agents` | List agent status |
 
-### Autonomous Mode
+### @mentions
 
-Let the agents debate without you:
+Type `@claude what do you think?` to direct a message to a specific agent.
 
-```
-/auto 3 discuss the architecture of this project
-```
+### Keyboard shortcuts
 
-Each agent gets 3 turns. They go sequentially (one speaks, the other responds). A random agent summarizes at the end. Type anything to interrupt and take over.
+- **Ctrl+E**: Toggle reasoning/thinking visibility
 
-```
-/auto continue 2 focus on the auth bug specifically
-```
+## Configuration
 
-Continue for 2 more turns each, with a steering message injected before they resume.
+### Machine config (`~/.pi/brainstorm/config.json`)
 
-### Keyboard Shortcuts
+Written by `npm run setup`. Contains resolved provider paths, auth state, and permission policy.
 
-| Key | Action |
-|-----|--------|
-| `Ctrl+E` | Toggle reasoning/thinking blocks visibility |
+### Project config (`brainstorm.config.json`)
 
-## How It Works
+Optional. Commit to your repo to set team defaults:
 
-```
-You (pi TUI)
-    |
-    v
-Orchestrator ──> ACP stdio ──> claude-agent-acp (subprocess)
-    |                |
-    |                └──> codex-acp (subprocess)
-    v
-TUI Renderer (side-by-side streaming, threaded collapse)
+```json
+{
+  "version": 1,
+  "agents": {
+    "claude": { "preferredModel": "claude-sonnet-4-5-20250514" },
+    "codex": { "enabled": true },
+    "gemini": { "enabled": true }
+  }
+}
 ```
 
-1. You type a message in pi
-2. The extension intercepts it and sends to all active (unmuted) agents via ACP
-3. Both agents stream responses in parallel, rendered side-by-side
-4. When both finish, responses collapse to full-width threaded view
-5. The full conversation history is shared -- agents see and build on each other's responses
+Project config merges on top of machine config. `null` values reset to defaults.
 
-### ACP Integration
+## Permission model
 
-Each agent is spawned as a subprocess communicating via JSON-RPC over stdio using the [ACP TypeScript SDK](https://www.npmjs.com/package/@agentclientprotocol/sdk). The extension acts as an ACP client:
+Setup prompts for a permission policy: **full** (default) or **restricted**.
 
-- Advertises `fs` and `terminal` capabilities
-- Implements `readTextFile`, `writeTextFile`, `createTerminal`, etc.
-- Auto-approves permission requests via `requestPermission`
-- Sets full-permission session modes when available (`bypassPermissions`, `full-access`)
+| Provider | Full access | Restricted |
+|----------|-------------|------------|
+| Claude | ACP bypassPermissions mode + env vars | Default mode with approval prompts |
+| Codex | `danger-full-access` + `approval_policy="never"` | Default sandbox with approvals |
+| Gemini | `--approval-mode=yolo` + `GEMINI_SANDBOX=false` | Default mode with optional sandbox |
 
-### Adding More Agents
+## Diagnostics
 
-Any ACP-compatible CLI can be added. Edit `src/types.ts`:
-
-```typescript
-export const DEFAULT_AGENTS: Record<string, AgentConfig> = {
-  claude: {
-    name: "claude",
-    command: "claude-agent-acp",
-    args: [],
-    color: "#4a9eff",
-    label: "Claude",
-  },
-  codex: {
-    name: "codex",
-    command: "codex-acp",
-    args: ["-c", 'sandbox_permissions=["disk-full-read-access","disk-full-write-access","network-full-access"]'],
-    color: "#10b981",
-    label: "Codex",
-  },
-  // Add your agent here:
-  gemini: {
-    name: "gemini",
-    command: "gemini-cli-acp",
-    args: [],
-    color: "#f59e0b",
-    label: "Gemini",
-  },
-};
+```bash
+npm run doctor
+node dist/cli.js doctor --json
 ```
 
-Rebuild and restart pi.
+## Troubleshooting
 
-## Customization
-
-### System Prompt
-
-Edit `src/PROMPT.md` to change how agents behave in the brainstorm. The prompt uses `{{variable}}` interpolation:
-
-- `{{agent_name}}` -- the agent's internal name
-- `{{agent_label}}` -- display name (e.g., "Claude")
-- `{{participants}}` -- all participants in the session
-- `{{working_directory}}` -- the current project path
-
-You can also place a `BRAINSTORM_PROMPT.md` in your project root to override per-project.
-
-### Auto Mode Prompt
-
-Edit `src/AUTO_PROMPT.md` to customize autonomous discussion behavior. Supports conditional blocks:
-
-```
-{{#topic}}
-## Focus topic
-{{topic}}
-{{/topic}}
-```
+- **Agent won't start**: Run `npm run doctor` to check command resolution and auth
+- **Permission denied**: Check `~/.claude/settings.json` has `"permissions": { "defaultMode": "bypassPermissions" }` for Claude
+- **Codex keychain popup**: Ensure `CODEX_CLI_AUTH_CREDENTIALS_STORE=file` is set (handled by setup)
+- **Gemini ACP startup fails**: Check Node.js version compatibility and `gemini --acp` works standalone
 
 ## Development
 
 ```bash
-npm run build     # Compile TypeScript + copy prompt files to dist
-npm run dev       # Watch mode
-npm test          # Unit tests
-npm run test:e2e  # E2E tests (requires ACP bridges installed + authenticated)
+npm run dev      # watch mode (tsc --watch)
+npm run build    # one-time build
+npm test         # unit tests
 ```
-
-### Project Structure
-
-```
-src/
-  index.ts          Extension entry point, slash commands, event wiring
-  orchestrator.ts   Message routing, @mentions, mute, auto mode loop
-  agents.ts         ACP client, subprocess spawning, stream handling
-  renderer.ts       TUI components (AgentBlock, SplitColumn, boxes)
-  prompt.ts         Template loading and {{variable}} interpolation
-  types.ts          Shared types, default agent configs
-  split-column.ts   Side-by-side rendering component
-  PROMPT.md         System prompt template
-  AUTO_PROMPT.md    Auto mode prompt template
-```
-
-## Known Issues
-
-- `claude-agent-acp` sends `tool_call` ACP notifications that don't pass the SDK's schema validation. These are suppressed (non-breaking -- message streaming works fine).
-- Codex on macOS may require keychain access for ChatGPT auth on first launch. The extension sets `CODEX_CLI_AUTH_CREDENTIALS_STORE=file` to use file-based auth instead.
-
-## License
-
-MIT
