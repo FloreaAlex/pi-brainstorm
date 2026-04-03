@@ -3,13 +3,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const packageRoot = join(__dirname, "..");
 
 export function loadPromptTemplate(cwd: string): string {
 	const projectPrompt = join(cwd, "BRAINSTORM_PROMPT.md");
 	if (existsSync(projectPrompt)) {
 		return readFileSync(projectPrompt, "utf-8");
 	}
-	const defaultPrompt = join(__dirname, "PROMPT.md");
+	const defaultPrompt = join(packageRoot, "prompts", "BRAINSTORM.md");
 	return readFileSync(defaultPrompt, "utf-8");
 }
 
@@ -43,7 +44,7 @@ export function buildAgentPrompt(cwd: string, agentName: string, agentLabel: str
 }
 
 export function loadAutoPromptTemplate(): string {
-	const defaultPrompt = join(__dirname, "AUTO_PROMPT.md");
+	const defaultPrompt = join(packageRoot, "prompts", "AUTO.md");
 	return readFileSync(defaultPrompt, "utf-8");
 }
 
