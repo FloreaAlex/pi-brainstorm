@@ -2,11 +2,14 @@
 	"name": "pi-brainstorm",
 	"version": "0.1.0",
 	"description": "Multi-agent brainstorming extension for pi coding-agent via ACP",
+	"private": true,
 	"type": "module",
 	"pi": {
 		"extensions": ["dist/extension/index.js"]
 	},
 	"scripts": {
+		"setup": "npm run build && node dist/cli.js setup",
+		"doctor": "npm run build && node dist/cli.js doctor",
 		"build": "tsc",
 		"dev": "tsc --watch",
 		"test": "vitest --run",
