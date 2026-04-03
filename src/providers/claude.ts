@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentUserConfig, AuthResult, Provider, ProviderPermissions, ResolvedCommand, SpawnConfig } from "./types.js";
@@ -111,7 +111,7 @@ export class ClaudeProvider implements Provider {
 
 	private whichSync(cmd: string): string | null {
 		try {
-			return execFileSync("which", [cmd], { encoding: "utf-8" }).trim();
+			return execSync(`which ${cmd} 2>/dev/null`, { encoding: "utf-8" }).trim() || null;
 		} catch {
 			return null;
 		}

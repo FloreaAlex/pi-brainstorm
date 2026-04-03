@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentUserConfig, AuthResult, Provider, ProviderPermissions, ResolvedCommand, SpawnConfig } from "./types.js";
@@ -24,7 +24,7 @@ export class GeminiProvider implements Provider {
 
 		// Check PATH
 		try {
-			const resolved = execFileSync("which", [cmd], { encoding: "utf-8" }).trim();
+			const resolved = execSync(`which ${cmd} 2>/dev/null`, { encoding: "utf-8" }).trim();
 			if (resolved) {
 				return { path: resolved, source: "path" };
 			}
