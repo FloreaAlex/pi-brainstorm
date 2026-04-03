@@ -9,9 +9,17 @@ export interface SmokeTestOptions {
 	timeoutMs?: number;
 }
 
+function killProc(proc: ChildProcess): void {
+	try { proc.kill("SIGKILL"); } catch {}
+	try { proc.stdin?.destroy(); } catch {}
+	try { proc.stdout?.destroy(); } catch {}
+	try { proc.stderr?.destroy(); } catch {}
+}
+
 export async function acpSmokeTest(options: SmokeTestOptions): Promise<{ ok: boolean; error?: string }> {
 	const { command, args, env, timeoutMs = 30_000 } = options;
 	let proc: ChildProcess | null = null;
+	const origErr = console.error;
 
 	try {
 		proc = spawn(command, args, {
@@ -20,19 +28,22 @@ export async function acpSmokeTest(options: SmokeTestOptions): Promise<{ ok: boo
 		});
 		proc.stderr?.resume();
 
+		// Detach so the child doesn't keep node alive
+		proc.unref();
+
 		const input = Writable.toWeb(proc.stdin!);
 		const output = Readable.toWeb(proc.stdout!) as ReadableStream<Uint8Array>;
 		const stream = acp.ndJsonStream(input, output);
 
 		// Suppress ACP SDK noise (validation errors, non-JSON debug lines from bridges)
-		const origErr = console.error;
 		console.error = (...a: unknown[]) => {
 			const msg = String(a[0] ?? "");
 			if (
 				msg.includes("Error handling notification") ||
 				msg.includes("Invalid params") ||
 				msg.includes("Failed to parse JSON") ||
-				msg.includes("is not valid JSON")
+				msg.includes("is not valid JSON") ||
+				msg.includes("ACP write error")
 			) return;
 			origErr(...a);
 		};
@@ -74,7 +85,6 @@ export async function acpSmokeTest(options: SmokeTestOptions): Promise<{ ok: boo
 			}),
 		);
 
-		console.error = origErr;
 		return { ok: true };
 	} catch (err) {
 		let message: string;
@@ -87,12 +97,7 @@ export async function acpSmokeTest(options: SmokeTestOptions): Promise<{ ok: boo
 		}
 		return { ok: false, error: message };
 	} finally {
-		if (proc && proc.exitCode === null) {
-			proc.kill();
-			await new Promise<void>((r) => {
-				proc!.on("exit", r);
-				setTimeout(() => { proc!.kill("SIGKILL"); r(); }, 3000);
-			});
-		}
+		console.error = origErr;
+		if (proc) killProc(proc);
 	}
 }
