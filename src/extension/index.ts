@@ -79,7 +79,14 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 		const names = agentNames().map((n) => {
 			const state = orchestrator?.getState().agents.get(n);
 			const color = state?.config.color;
-			return color ? chalk.hex(color)(n) : n;
+			const model = state?.config.preferredModel;
+			const nameStr = color ? chalk.hex(color)(n) : n;
+			if (model) {
+				// Shorten model name: "claude-opus-4-6" → "opus-4-6", "gemini-3.1-pro" → "3.1-pro"
+				const short = model.replace(/^claude-/, "").replace(/^gemini-/, "").replace(/^gpt-/, "");
+				return `${nameStr}${chalk.dim(":")}${chalk.dim(short)}`;
+			}
+			return nameStr;
 		});
 		return `${label} ${chalk.dim("[")}${names.join(chalk.dim(", "))}${chalk.dim("]")}${tokens}`;
 	}

@@ -77,8 +77,6 @@ export class AgentBlock implements Component {
 	private spinnerIdx = 0;
 	private pulsing = false;
 	private pulseFrame = 0;
-	private modelName: string | undefined;
-
 	constructor(agentLabel: string, colorHex: string, markdownTheme: MarkdownTheme) {
 		this.agentLabel = agentLabel;
 		this.colorHex = colorHex;
@@ -120,10 +118,6 @@ export class AgentBlock implements Component {
 			this.body.setText(this.messageText);
 		}
 		this.updateHeader();
-	}
-
-	setModel(model: string | undefined): void {
-		this.modelName = model;
 	}
 
 	setPulsing(pulsing: boolean): void {
@@ -210,17 +204,8 @@ export class AgentBlock implements Component {
 			result.push(leftBorder);
 		}
 
-		// Bottom border: ╰─── model ───╯
-		if (this.modelName) {
-			const modelText = ` ${this.modelName} `;
-			const modelVisWidth = visibleWidth(modelText);
-			const bottomLineLen = Math.max(0, width - 2 - modelVisWidth);
-			const bottomRight = Math.floor(bottomLineLen / 4);
-			const bottomLeft = bottomLineLen - bottomRight;
-			result.push(colorFn("\u2570" + "─".repeat(bottomLeft)) + chalk.dim(modelText) + colorFn("─".repeat(bottomRight) + "\u256F"));
-		} else {
-			result.push(colorFn(`\u2570${"─".repeat(Math.max(0, width - 2))}\u256F`));
-		}
+		// Bottom border: ╰───────────╯
+		result.push(colorFn(`\u2570${"─".repeat(Math.max(0, width - 2))}\u256F`));
 
 		// Safety: ensure no line exceeds the given width
 		return result.map((line) => truncateToWidth(line, width, "", true));
@@ -359,7 +344,7 @@ export class BrainstormRenderer {
 			const label = config?.label ?? name;
 			const color = config?.color ?? "#888888";
 			const block = new AgentBlock(label, color, this.markdownTheme);
-			block.setModel(config?.preferredModel);
+
 			this.activeBlocks.set(name, block);
 			blocks.push(block);
 		}
@@ -414,7 +399,6 @@ export class BrainstormRenderer {
 		const label = config?.label ?? agentName;
 		const color = config?.color ?? "#888888";
 		const block = new AgentBlock(label, color, this.markdownTheme);
-		block.setModel(config?.preferredModel);
 		block.setPulsing(true);
 		this.activeBlocks.set(agentName, block);
 
@@ -479,7 +463,7 @@ export class BrainstormRenderer {
 				const label = config?.label ?? msg.source;
 				const color = config?.color ?? "#888888";
 				const block = new AgentBlock(label, color, this.markdownTheme);
-				block.setModel(config?.preferredModel);
+	
 				block.setText(msg.content);
 				block.setStreaming(false);
 
