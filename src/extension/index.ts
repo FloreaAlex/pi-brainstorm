@@ -82,13 +82,17 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 			const info = state?.sessionInfo;
 			const nameStr = color ? chalk.hex(color)(n) : n;
 
-			// Show actual model from ACP session, fall back to config preference
+			// Show actual model and thinking level from ACP session
 			const model = info?.model ?? state?.config.preferredModel;
+			const parts = [nameStr];
 			if (model) {
 				const short = model.replace(/^claude-/, "").replace(/^gemini-/, "").replace(/^gpt-/, "");
-				return `${nameStr}${chalk.dim(":")}${chalk.dim(short)}`;
+				parts.push(chalk.dim(short));
 			}
-			return nameStr;
+			if (info?.thoughtLevel) {
+				parts.push(chalk.dim(`\u{1F4AD}${info.thoughtLevel}`));
+			}
+			return parts.join(chalk.dim(":"));
 		});
 		return `${label} ${chalk.dim("[")}${names.join(chalk.dim(", "))}${chalk.dim("]")}${tokens}`;
 	}

@@ -174,25 +174,42 @@ export class AgentManager {
 				// Config option not supported
 			}
 
+			// Track actual values set (not stale snapshot from newSession)
+			state.sessionInfo = {};
+
+			// Read initial values from session snapshot
+			const configOpts = (session.configOptions ?? []) as any[];
+			for (const opt of configOpts) {
+				if (opt.category === "model" && opt.currentValue) {
+					state.sessionInfo.model = opt.currentValue;
+				} else if (opt.category === "thought_level" && opt.currentValue) {
+					state.sessionInfo.thoughtLevel = opt.currentValue;
+				} else if ((opt.category === "context_window" || opt.id === "context_window") && opt.currentValue) {
+					state.sessionInfo.contextWindow = typeof opt.currentValue === "number"
+						? opt.currentValue
+						: parseInt(opt.currentValue, 10) || undefined;
+				}
+			}
+
 			// Set highest reasoning/thinking level — brainstorming benefits from max effort
 			try {
-				const thoughtOption = session.configOptions?.find(
+				const thoughtOption = configOpts.find(
 					(o: any) => o.category === "thought_level" && o.type === "select",
 				);
 				if (thoughtOption) {
-					const opts = ((thoughtOption as any).options ?? []) as any[];
-					// Flatten grouped options if needed
+					const opts = (thoughtOption.options ?? []) as any[];
 					const flat = opts.flatMap((o: any) => (o.group != null ? o.options : [o]));
 					if (flat.length > 0) {
-						// Last option is typically highest reasoning effort
 						const highest = flat[flat.length - 1];
-						if (highest.value !== (thoughtOption as any).currentValue) {
+						if (highest.value !== thoughtOption.currentValue) {
 							await connection.setSessionConfigOption({
 								sessionId: session.sessionId,
-								configId: (thoughtOption as any).id,
+								configId: thoughtOption.id,
 								value: highest.value,
 							});
 						}
+						// Track what we actually set
+						state.sessionInfo.thoughtLevel = highest.value;
 					}
 				}
 			} catch {
@@ -202,48 +219,32 @@ export class AgentManager {
 			// Set preferred model if specified in config
 			if (config.preferredModel) {
 				try {
-					const modelOption = session.configOptions?.find(
+					const modelOption = configOpts.find(
 						(o: any) => o.category === "model" && o.type === "select",
 					);
 					if (modelOption) {
-						const opts = ((modelOption as any).options ?? []) as any[];
+						const opts = (modelOption.options ?? []) as any[];
 						const flat = opts.flatMap((o: any) => (o.group != null ? o.options : [o]));
-						// Look for exact match or substring match on the preferred model
 						const preferred = config.preferredModel.toLowerCase();
 						const match = flat.find((o: any) =>
 							o.value?.toLowerCase() === preferred ||
 							o.value?.toLowerCase().includes(preferred),
 						);
-						if (match && match.value !== (modelOption as any).currentValue) {
-							await connection.setSessionConfigOption({
-								sessionId: session.sessionId,
-								configId: (modelOption as any).id,
-								value: match.value,
-							});
+						if (match) {
+							if (match.value !== modelOption.currentValue) {
+								await connection.setSessionConfigOption({
+									sessionId: session.sessionId,
+									configId: modelOption.id,
+									value: match.value,
+								});
+							}
+							// Track what we actually set (or confirmed)
+							state.sessionInfo.model = match.value;
 						}
 					}
 				} catch {
 					// Model selection not supported by this agent
 				}
-			}
-
-			// Read back actual session values from ACP config options
-			state.sessionInfo = {};
-			try {
-				const configOpts = session.configOptions ?? [];
-				for (const opt of configOpts as any[]) {
-					if (opt.category === "model") {
-						state.sessionInfo.model = opt.currentValue ?? undefined;
-					} else if (opt.category === "thought_level") {
-						state.sessionInfo.thoughtLevel = opt.currentValue ?? undefined;
-					} else if (opt.category === "context_window" || opt.id === "context_window") {
-						state.sessionInfo.contextWindow = typeof opt.currentValue === "number"
-							? opt.currentValue
-							: parseInt(opt.currentValue, 10) || undefined;
-					}
-				}
-			} catch {
-				// Config options not readable
 			}
 
 			state.status = "active";
