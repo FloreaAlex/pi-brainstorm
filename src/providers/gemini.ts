@@ -1,8 +1,15 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-import type { AgentUserConfig, AuthResult, Provider, ProviderPermissions, ResolvedCommand, SpawnConfig } from "./types.js";
+import type {
+	AgentUserConfig,
+	AuthResult,
+	Provider,
+	ProviderInstallSpec,
+	ProviderPermissions,
+	ResolveContext,
+	ResolvedCommand,
+	SpawnConfig,
+} from "./types.js";
 import { acpSmokeTest } from "./smoke-test.js";
-import { findOnPath } from "./resolve.js";
+import { findOnPath, resolveManagedCommand, resolvePackageCommand } from "./resolve.js";
 
 export class GeminiProvider implements Provider {
 	readonly name = "gemini";
@@ -13,30 +20,42 @@ export class GeminiProvider implements Provider {
 		return ["darwin", "linux", "win32"];
 	}
 
-	async resolveCommand(): Promise<ResolvedCommand | null> {
+	async resolveCommand(context: ResolveContext): Promise<ResolvedCommand | null> {
 		const cmd = "gemini";
 
-		// Check node_modules/.bin first
-		const nmBin = join(process.cwd(), "node_modules", ".bin", cmd);
-		if (existsSync(nmBin)) {
-			return { path: nmBin, source: "node_modules" };
+		const managed = resolveManagedCommand(cmd, context);
+		if (managed) {
+			return managed;
 		}
 
-		// Check PATH
-		try {
-			const resolved = findOnPath(cmd);
-			if (resolved) {
-				return { path: resolved, source: "path" };
-			}
-		} catch {
-			// not found in PATH
+		const nmBin = resolvePackageCommand(cmd, context);
+		if (nmBin) {
+			return nmBin;
+		}
+
+		const resolved = findOnPath(cmd);
+		if (resolved) {
+			return { path: resolved, source: "path" };
 		}
 
 		return null;
 	}
 
-	installInstructions(_platform: NodeJS.Platform): string {
-		return "npm install -g @google/gemini-cli";
+	getInstallSpec(_platform: NodeJS.Platform, context: ResolveContext): ProviderInstallSpec {
+		return {
+			kind: "npm",
+			summary: `npm install --prefix ${context.managedToolsRoot} @google/gemini-cli`,
+			command: "npm",
+			args: ["install", "--prefix", context.managedToolsRoot, "@google/gemini-cli"],
+			autoInstallable: true,
+		};
+	}
+
+	getAuthCommand(_command: string): { command: string; args: string[] } {
+		return {
+			command: "gemini",
+			args: ["auth"],
+		};
 	}
 
 	async checkAuth(command: string): Promise<AuthResult> {

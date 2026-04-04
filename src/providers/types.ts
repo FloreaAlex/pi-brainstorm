@@ -1,6 +1,27 @@
+export type ResolvedCommandSource = "managed" | "node_modules" | "path" | "variant";
+
 export interface ResolvedCommand {
 	path: string;
-	source: "bundled" | "node_modules" | "path" | "variant";
+	source: ResolvedCommandSource;
+}
+
+export interface ProviderInstallSpec {
+	kind: "npm" | "brew" | "manual";
+	summary: string;
+	command?: string;
+	args?: string[];
+	autoInstallable: boolean;
+}
+
+export interface ResolveContext {
+	packageRoot: string;
+	managedToolsRoot: string;
+}
+
+export interface ProviderAuthCommand {
+	command: string;
+	args: string[];
+	env?: Record<string, string>;
 }
 
 export interface AuthResult {
@@ -34,7 +55,7 @@ export interface AgentUserConfig {
 export interface MachineAgentState {
 	enabled: boolean;
 	command: string;
-	commandSource: "bundled" | "node_modules" | "path" | "variant";
+	commandSource: ResolvedCommandSource;
 	args?: string[];
 	env?: Record<string, string>;
 	preferredModel?: string;
@@ -63,8 +84,9 @@ export interface Provider {
 	label: string;
 	color: string;
 	supportedPlatforms(): NodeJS.Platform[];
-	resolveCommand(): Promise<ResolvedCommand | null>;
-	installInstructions(platform: NodeJS.Platform): string;
+	resolveCommand(context: ResolveContext): Promise<ResolvedCommand | null>;
+	getInstallSpec(platform: NodeJS.Platform, context: ResolveContext): ProviderInstallSpec | null;
+	getAuthCommand(command: string): ProviderAuthCommand;
 	checkAuth(command: string): Promise<AuthResult>;
 	spawnConfig(
 		resolved: ResolvedCommand,

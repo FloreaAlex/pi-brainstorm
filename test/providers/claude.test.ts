@@ -26,9 +26,18 @@ describe("ClaudeProvider", () => {
 	});
 
 	describe("installInstructions", () => {
-		it("returns npm install command", () => {
-			const instructions = provider.installInstructions("darwin");
-			expect(instructions).toBe("npm install -g @agentclientprotocol/claude-agent-acp");
+		it("returns an npm install spec rooted in managed tools", () => {
+			const spec = provider.getInstallSpec("darwin", {
+				packageRoot: "/repo",
+				managedToolsRoot: "/managed-tools",
+			});
+			expect(spec).toEqual({
+				kind: "npm",
+				summary: "npm install --prefix /managed-tools @agentclientprotocol/claude-agent-acp",
+				command: "npm",
+				args: ["install", "--prefix", "/managed-tools", "@agentclientprotocol/claude-agent-acp"],
+				autoInstallable: true,
+			});
 		});
 	});
 

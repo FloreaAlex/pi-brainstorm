@@ -1,8 +1,15 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-import type { AgentUserConfig, AuthResult, Provider, ProviderPermissions, ResolvedCommand, SpawnConfig } from "./types.js";
+import type {
+	AgentUserConfig,
+	AuthResult,
+	Provider,
+	ProviderInstallSpec,
+	ProviderPermissions,
+	ResolveContext,
+	ResolvedCommand,
+	SpawnConfig,
+} from "./types.js";
 import { acpSmokeTest } from "./smoke-test.js";
-import { findOnPath } from "./resolve.js";
+import { findOnPath, resolveManagedCommand, resolvePackageCommand } from "./resolve.js";
 
 const PRIMARY_COMMAND = "claude-agent-acp";
 const VARIANT_COMMANDS = ["claude-code-acp"];
@@ -21,20 +28,22 @@ export class ClaudeProvider implements Provider {
 		return ["darwin", "linux", "win32"];
 	}
 
-	async resolveCommand(): Promise<ResolvedCommand | null> {
-		// 1. Check node_modules/.bin
-		const localBin = join("node_modules", ".bin", PRIMARY_COMMAND);
-		if (existsSync(localBin)) {
-			return { path: localBin, source: "node_modules" };
+	async resolveCommand(context: ResolveContext): Promise<ResolvedCommand | null> {
+		const managed = resolveManagedCommand(PRIMARY_COMMAND, context);
+		if (managed) {
+			return managed;
 		}
 
-		// 2. Check PATH for primary command
+		const localBin = resolvePackageCommand(PRIMARY_COMMAND, context);
+		if (localBin) {
+			return localBin;
+		}
+
 		const primaryPath = findOnPath(PRIMARY_COMMAND);
 		if (primaryPath) {
 			return { path: primaryPath, source: "path" };
 		}
 
-		// 3. Check PATH for variant commands
 		for (const variant of VARIANT_COMMANDS) {
 			const variantPath = findOnPath(variant);
 			if (variantPath) {
@@ -45,8 +54,21 @@ export class ClaudeProvider implements Provider {
 		return null;
 	}
 
-	installInstructions(_platform: NodeJS.Platform): string {
-		return "npm install -g @agentclientprotocol/claude-agent-acp";
+	getInstallSpec(_platform: NodeJS.Platform, context: ResolveContext): ProviderInstallSpec {
+		return {
+			kind: "npm",
+			summary: `npm install --prefix ${context.managedToolsRoot} @agentclientprotocol/claude-agent-acp`,
+			command: "npm",
+			args: ["install", "--prefix", context.managedToolsRoot, "@agentclientprotocol/claude-agent-acp"],
+			autoInstallable: true,
+		};
+	}
+
+	getAuthCommand(_command: string): { command: string; args: string[] } {
+		return {
+			command: "claude",
+			args: ["login"],
+		};
 	}
 
 	async checkAuth(command: string): Promise<AuthResult> {

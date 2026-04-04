@@ -1,17 +1,9 @@
-import { execSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, readlinkSync, symlinkSync, unlinkSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { join } from "node:path";
 import { homedir } from "node:os";
-import { fileURLToPath } from "node:url";
-import { createInterface } from "node:readline";
 import { getProviders } from "../providers/registry.js";
 import { writeMachineConfig } from "../config.js";
-import type { BrainstormConfig, MachineAgentState } from "../providers/types.js";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const PACKAGE_ROOT = resolve(__dirname, "..", "..");
-const EXTENSION_DIR = join(homedir(), ".pi", "agent", "extensions");
-const SYMLINK_PATH = join(EXTENSION_DIR, "pi-brainstorm");
+import { PACKAGE_ROOT, scanEnvironment } from "./environment.js";
+import { ensureExtensionSymlink, promptPermissionPolicy, buildMachineConfig } from "./primitives.js";
 
 function log(msg: string): void {
 	console.log(msg);
@@ -25,81 +17,39 @@ function fail(msg: string): void {
 	console.log(`  \u2717 ${msg}`);
 }
 
-async function prompt(question: string): Promise<string> {
-	const rl = createInterface({ input: process.stdin, output: process.stdout });
-	return new Promise((resolve) => {
-		rl.question(question, (answer) => {
-			rl.close();
-			resolve(answer.trim());
-		});
-	});
-}
-
-function checkPi(): string | null {
-	try {
-		const version = execSync("pi --version 2>&1", { encoding: "utf-8" }).trim();
-		return version || null;
-	} catch {
-		return null;
-	}
-}
-
-function ensureSymlink(): void {
-	if (existsSync(SYMLINK_PATH)) {
-		const stat = lstatSync(SYMLINK_PATH);
-		if (stat.isSymbolicLink()) {
-			const target = resolve(dirname(SYMLINK_PATH), readlinkSync(SYMLINK_PATH));
-			if (target === PACKAGE_ROOT) {
-				ok(`Symlink exists: ${SYMLINK_PATH} \u2192 ${PACKAGE_ROOT}`);
-				return;
-			}
-			// Points elsewhere -- remove and recreate
-			log(`  Symlink points to ${target}, updating...`);
-			unlinkSync(SYMLINK_PATH);
-		} else {
-			// Not a symlink (regular file or directory)
-			fail(`${SYMLINK_PATH} exists but is not a symlink. Remove it manually.`);
-			throw new Error("Cannot create symlink — path exists and is not a symlink");
-		}
-	}
-
-	// Create parent directory and symlink
-	mkdirSync(EXTENSION_DIR, { recursive: true });
-	symlinkSync(PACKAGE_ROOT, SYMLINK_PATH);
-	ok(`Symlinked: ${SYMLINK_PATH} \u2192 ${PACKAGE_ROOT}`);
-}
-
 export async function runSetup(): Promise<void> {
 	log("");
 	log("pi-brainstorm setup");
 	log("===================");
 	log("");
 
-	// 1. Check Pi
+	const report = await scanEnvironment({ packageRoot: PACKAGE_ROOT });
+
 	log("Checking Pi...");
-	const piVersion = checkPi();
-	if (!piVersion) {
+	if (!report.prerequisites.pi.ok) {
 		fail("Pi is not installed.");
 		log("  Install Pi first: https://github.com/mariozechner/pi-mono");
 		throw new Error("Pi is not installed");
 	}
-	ok(`Pi ${piVersion}`);
+	ok(`Pi ${report.prerequisites.pi.version ?? "available"}`);
 	log("");
 
-	// 2. Symlink extension
 	log("Symlinking extension...");
-	ensureSymlink();
+	try {
+		ensureExtensionSymlink(PACKAGE_ROOT);
+		ok(`Symlink ensured`);
+	} catch (e) {
+		fail(e instanceof Error ? e.message : String(e));
+		throw e;
+	}
 	log("");
 
-	// 3. Detect providers
 	log("Detecting agents...");
 	log("");
 
-	const agents: Record<string, MachineAgentState> = {};
-
 	for (const provider of getProviders()) {
-		const platforms = provider.supportedPlatforms();
-		if (!platforms.includes(process.platform as NodeJS.Platform)) {
+		const providerState = report.providers[provider.name];
+		if (!providerState.supported) {
 			log(`  ${provider.label} (${provider.name})`);
 			log(`    Platform: \u2717 unsupported on ${process.platform}`);
 			log("");
@@ -108,54 +58,30 @@ export async function runSetup(): Promise<void> {
 
 		log(`  ${provider.label} (${provider.name})`);
 
-		// Resolve command
-		const resolved = await provider.resolveCommand();
-		if (!resolved) {
+		if (!providerState.installed || !providerState.resolved) {
 			log(`    Installed: \u2717 not found`);
-			log(`    Install:   ${provider.installInstructions(process.platform as NodeJS.Platform)}`);
+			log(`    Install:   ${providerState.installSpec?.summary ?? "Manual installation required"}`);
 			log("");
 			continue;
 		}
 
-		log(`    Installed: \u2713 ${resolved.path} (${resolved.source})`);
+		log(`    Installed: \u2713 ${providerState.resolved.path} (${providerState.resolved.source})`);
 
-		// Auth smoke test
-		const auth = await provider.checkAuth(resolved.path);
-		if (auth.ok) {
+		if (providerState.authenticated) {
 			log(`    Auth:      \u2713 Ready`);
 		} else {
-			log(`    Auth:      \u2717 ${auth.error ?? "Failed"}`);
-			log(`    Fix:       ${auth.loginCommand}`);
+			log(`    Auth:      \u2717 ${providerState.authError ?? "Failed"}`);
+			log(`    Fix:       ${providerState.loginCommand ?? "Authenticate manually"}`);
 		}
-
-		agents[provider.name] = {
-			enabled: auth.ok,
-			command: resolved.path,
-			commandSource: resolved.source,
-			auth: {
-				ok: auth.ok,
-				checkedAt: auth.checkedAt,
-				error: auth.error,
-			},
-		};
-
 		log("");
 	}
 
-	// 4. Permission policy
-	const isInteractive = process.stdin.isTTY;
-	let policy: "full" | "restricted" = "full";
-
-	if (isInteractive) {
-		const answer = await prompt("Permission policy: full access for all agents [Y/n] ");
-		if (answer.toLowerCase() === "n" || answer.toLowerCase() === "no") {
-			policy = "restricted";
-		}
-	}
+	const policy = await promptPermissionPolicy();
 
 	// Show policy notes per enabled agent
+	const config = buildMachineConfig(report, policy);
 	for (const provider of getProviders()) {
-		const agentState = agents[provider.name];
+		const agentState = config.agents[provider.name];
 		if (!agentState?.enabled) continue;
 		const perms = provider.describePermissions(policy);
 		log(`  ${provider.label}: ${policy} \u2192 ${perms.notes[0]}`);
@@ -163,20 +89,13 @@ export async function runSetup(): Promise<void> {
 
 	log("");
 
-	// 5. Write config
-	const config: BrainstormConfig = {
-		version: 1,
-		permissions: { defaultPolicy: policy },
-		agents,
-	};
-
 	writeMachineConfig(undefined, config);
 	const configPath = join(homedir(), ".pi", "brainstorm", "config.json");
 	log(`Config written to ${configPath}`);
 
-	const enabledCount = Object.values(agents).filter((a) => a.enabled).length;
+	const enabledCount = Object.values(config.agents).filter((a) => a.enabled).length;
 	const totalCount = getProviders().length;
-	const enabledNames = Object.entries(agents)
+	const enabledNames = Object.entries(config.agents)
 		.filter(([, a]) => a.enabled)
 		.map(([n]) => n)
 		.join(", ");

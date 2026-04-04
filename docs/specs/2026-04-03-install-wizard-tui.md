@@ -200,6 +200,8 @@ Provider resolution must stop using `process.cwd()` or implicit repo-relative lo
 
 This fixes the current inconsistency where provider lookup depends on the caller's working directory.
 
+On Windows, resolution must also consider launcher extensions such as `.cmd`, `.bat`, and `.exe`; otherwise managed npm installs will be reported as missing even when present.
+
 ## 7. Platform Matrix
 
 The wizard must be honest about what it can auto-install versus what it can only detect.
@@ -213,7 +215,7 @@ The wizard must be honest about what it can auto-install versus what it can only
 Notes:
 
 - Do not describe Homebrew as a Linux prerequisite in the current spec
-- On macOS, Homebrew is only relevant if the user selects Codex and Codex is not already installed
+- On macOS, Homebrew is only relevant if the user selects Codex and Codex is not already installed; the wizard should detect and use Homebrew when available, not attempt to install Homebrew itself
 - Unsupported providers are shown as unsupported, not missing
 
 ## 8. Wizard Flow
@@ -247,6 +249,22 @@ Offer provider actions based on `EnvironmentReport`:
 
 Installations target `~/.pi/brainstorm/tools` where supported by the install method. System-managed installs such as Homebrew remain valid when a provider does not have a portable managed install path.
 
+The wizard must track the outcome of each installation attempt using a structured result:
+
+```ts
+interface ProvisionResult {
+  provider: string;
+  action: "installed" | "skipped" | "failed" | "already_present" | "authenticated";
+  error?: string;
+}
+```
+
+If an installation fails, the wizard must:
+1. Catch the error and report it clearly.
+2. Offer to retry or skip (do not abort the entire wizard flow).
+3. Continue with remaining providers.
+4. Re-scan the environment after all installations to ensure the subsequent config phase uses accurate, live state.
+
 ### Phase 4: interactive auth
 
 For each provider that needs auth:
@@ -257,6 +275,8 @@ For each provider that needs auth:
 4. rerun `checkAuth(resolved.path)` using the resolved binary
 
 Prefer plain inherited stdio first. Only introduce `node-pty` if a provider demonstrably fails with inherited stdio.
+
+The wizard's prompt manager must therefore support pause/resume semantics (or an equivalent owned lifecycle) so auth subprocesses do not contend with an active `readline` instance on the same stdin.
 
 ### Phase 5: extension and machine config
 
@@ -314,8 +334,9 @@ The spec is considered implemented only when all of the following are true:
 1. Replace `file:../pi-mono` dependencies with published package versions
 2. Add `wizard` to `package.json` and `src/cli.ts`
 3. Introduce `ResolveContext`, `ProviderInstallSpec`, and updated provider resolution
-4. Build `scanEnvironment()` and refactor `doctor` to consume it
-5. Extract shared setup primitives from `src/setup/wizard.ts`
-6. Implement `src/installer/` for the provisioning flow
-7. Add `bootstrap.sh` and `bootstrap.ps1`
-8. Add unit coverage for scan/provider resolution and an integration-style wizard smoke test
+4. Add unit coverage for explicit-root provider resolution, including Windows launcher-name handling
+5. Build `scanEnvironment()` and refactor `doctor` to consume it
+6. Extract shared setup primitives from `src/setup/wizard.ts`
+7. Implement `src/installer/` for the provisioning flow
+8. Add `bootstrap.sh` and `bootstrap.ps1`
+9. Add unit coverage for `scanEnvironment()` and an integration-style wizard smoke test

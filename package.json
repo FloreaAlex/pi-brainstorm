@@ -8,6 +8,7 @@
 		"extensions": ["dist/extension/index.js"]
 	},
 	"scripts": {
+		"wizard": "npm run build && node dist/cli.js wizard",
 		"setup": "npm run build && node dist/cli.js setup",
 		"doctor": "npm run build && node dist/cli.js doctor",
 		"build": "tsc",
@@ -29,9 +30,9 @@
 	"devDependencies": {
 		"typescript": "^5.9.2",
 		"vitest": "^3.2.0",
-		"@mariozechner/pi-coding-agent": "file:../pi-mono/packages/coding-agent",
-		"@mariozechner/pi-tui": "file:../pi-mono/packages/tui",
-		"@mariozechner/pi-ai": "file:../pi-mono/packages/ai",
-		"@mariozechner/pi-agent-core": "file:../pi-mono/packages/agent"
+		"@mariozechner/pi-coding-agent": "^0.64.0",
+		"@mariozechner/pi-tui": "^0.64.0",
+		"@mariozechner/pi-ai": "^0.64.0",
+		"@mariozechner/pi-agent-core": "^0.64.0"
 	}
 }

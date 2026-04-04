@@ -168,16 +168,29 @@ describe("CodexProvider", () => {
 		});
 	});
 
-	describe("installInstructions", () => {
-		it("returns brew command for darwin", () => {
-			const instructions = provider.installInstructions("darwin");
-			expect(instructions).toContain("brew install");
-			expect(instructions).toContain("zed-industries/codex-acp");
+	describe("getInstallSpec", () => {
+		it("returns brew install spec for darwin", () => {
+			const spec = provider.getInstallSpec("darwin", {
+				packageRoot: "/repo",
+				managedToolsRoot: "/managed-tools",
+			});
+			expect(spec).toEqual({
+				kind: "brew",
+				summary: "brew install zed-industries/codex-acp",
+				command: "brew",
+				args: ["install", "zed-industries/codex-acp"],
+				autoInstallable: true,
+			});
 		});
 
-		it("returns GitHub link for other platforms", () => {
-			const instructions = provider.installInstructions("linux");
-			expect(instructions).toContain("github");
+		it("returns manual install spec for linux", () => {
+			const spec = provider.getInstallSpec("linux", {
+				packageRoot: "/repo",
+				managedToolsRoot: "/managed-tools",
+			});
+			expect(spec?.kind).toBe("manual");
+			expect(spec?.autoInstallable).toBe(false);
+			expect(spec?.summary).toContain("github");
 		});
 	});
 });

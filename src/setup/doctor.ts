@@ -1,17 +1,7 @@
-import { execSync } from "node:child_process";
-import { existsSync, lstatSync, readlinkSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { homedir } from "node:os";
-import { fileURLToPath } from "node:url";
 import { loadMachineConfig, loadProjectConfig, mergeConfigs } from "../config.js";
 import { getProviders } from "../providers/registry.js";
 import type { BrainstormConfig } from "../providers/types.js";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const PACKAGE_ROOT = resolve(__dirname, "..", "..");
-const SYMLINK_PATH = join(homedir(), ".pi", "agent", "extensions", "pi-brainstorm");
-
-const MACHINE_CONFIG_PATH = join(homedir(), ".pi", "brainstorm", "config.json");
+import { MACHINE_CONFIG_PATH, scanEnvironment, type EnvironmentReport } from "./environment.js";
 
 export interface DoctorCheck {
 	name: string;
@@ -25,35 +15,26 @@ export interface DoctorResult {
 	checks: DoctorCheck[];
 }
 
-/**
- * Run diagnostics to validate the live environment.
- * Re-checks everything from scratch (does not rely on cached config).
- */
 export async function runDoctor(options?: { json?: boolean; cwd?: string }): Promise<DoctorResult> {
 	const cwd = options?.cwd ?? process.cwd();
+	const report = await scanEnvironment({ cwd });
 	const checks: DoctorCheck[] = [];
 
-	// 1. Pi version
-	checks.push(checkPiVersion());
+	checks.push(checkPrerequisite("node", report.prerequisites.node));
+	checks.push(checkPrerequisite("npm", report.prerequisites.npm));
+	checks.push(checkPrerequisite("git", report.prerequisites.git));
+	checks.push(checkPrerequisite("pi", report.prerequisites.pi));
+	checks.push(checkSymlink(report));
+	checks.push(checkMachineConfig(report));
+	checks.push(checkProjectConfig(report));
 
-	// 2. Extension symlink
-	checks.push(checkSymlink());
-
-	// 3. Machine config
 	const machineConfig = loadMachineConfig();
-	checks.push(checkMachineConfig(machineConfig));
-
-	// 4. Project config
 	const projectConfig = loadProjectConfig(cwd);
-	checks.push(checkProjectConfig(projectConfig, cwd));
-
-	// 5. Each provider
 	const mergedConfig = machineConfig ? mergeConfigs(machineConfig, projectConfig) : null;
-	const providerChecks = await checkProviders(mergedConfig);
-	checks.push(...providerChecks);
+	checks.push(...checkProviders(report, mergedConfig));
 
 	const result: DoctorResult = {
-		ok: checks.every((c) => c.status !== "fail"),
+		ok: checks.every((check) => check.status !== "fail"),
 		checks,
 	};
 
@@ -66,62 +47,53 @@ export async function runDoctor(options?: { json?: boolean; cwd?: string }): Pro
 	return result;
 }
 
-function checkPiVersion(): DoctorCheck {
-	try {
-		const version = execSync("pi --version 2>&1", { encoding: "utf-8", timeout: 10_000 }).trim();
-		return { name: "pi", status: "ok", message: `Pi ${version}` };
-	} catch {
-		return { name: "pi", status: "fail", message: "Pi not found", detail: "'pi --version' failed or pi is not in PATH" };
+function checkPrerequisite(
+	name: string,
+	check: { ok: boolean; version?: string },
+): DoctorCheck {
+	if (!check.ok) {
+		return {
+			name,
+			status: "fail",
+			message: `${name} not found`,
+		};
 	}
+
+	return {
+		name,
+		status: "ok",
+		message: `${name} ${check.version ?? "available"}`,
+	};
 }
 
-function checkSymlink(): DoctorCheck {
-	if (!existsSync(SYMLINK_PATH)) {
+function checkSymlink(report: EnvironmentReport): DoctorCheck {
+	if (!report.extension.symlinked) {
 		return {
 			name: "symlink",
 			status: "fail",
 			message: "Extension not symlinked",
-			detail: `Expected symlink at ${SYMLINK_PATH}`,
+			detail: `Expected symlink at ${report.extension.symlinkPath}`,
 		};
 	}
 
-	try {
-		const stat = lstatSync(SYMLINK_PATH);
-		if (!stat.isSymbolicLink()) {
-			return {
-				name: "symlink",
-				status: "warn",
-				message: "Extension path exists but is not a symlink",
-				detail: `${SYMLINK_PATH} is not a symbolic link`,
-			};
-		}
-
-		const target = resolve(dirname(SYMLINK_PATH), readlinkSync(SYMLINK_PATH));
-		const normalizedTarget = resolve(target);
-		const normalizedRoot = resolve(PACKAGE_ROOT);
-
-		if (normalizedTarget !== normalizedRoot) {
-			return {
-				name: "symlink",
-				status: "warn",
-				message: `Symlink points to ${normalizedTarget}`,
-				detail: `Expected ${normalizedRoot}, got ${normalizedTarget}`,
-			};
-		}
-
-		return { name: "symlink", status: "ok", message: "pi-brainstorm (symlinked)" };
-	} catch (err) {
+	if (!report.extension.targetOk) {
 		return {
 			name: "symlink",
-			status: "fail",
-			message: "Failed to read symlink",
-			detail: err instanceof Error ? err.message : String(err),
+			status: "warn",
+			message: `Symlink points to ${report.extension.target ?? "unknown target"}`,
+			detail: `Expected current package root at ${report.extension.symlinkPath}`,
 		};
 	}
+
+	return {
+		name: "symlink",
+		status: "ok",
+		message: "pi-brainstorm (symlinked)",
+	};
 }
 
-function checkMachineConfig(config: BrainstormConfig | null): DoctorCheck {
-	if (!config) {
+function checkMachineConfig(report: EnvironmentReport): DoctorCheck {
+	if (!report.configs.machineConfigExists) {
 		return {
 			name: "machine-config",
 			status: "fail",
@@ -129,113 +101,95 @@ function checkMachineConfig(config: BrainstormConfig | null): DoctorCheck {
 			detail: `Expected at ${MACHINE_CONFIG_PATH}. Run npm run setup to create it.`,
 		};
 	}
+
 	return {
 		name: "machine-config",
 		status: "ok",
-		message: `Machine config: ${MACHINE_CONFIG_PATH}`,
+		message: `Machine config: ${report.configs.machineConfigPath}`,
 	};
 }
 
-function checkProjectConfig(config: Partial<BrainstormConfig> | null, cwd: string): DoctorCheck {
-	const path = join(cwd, "brainstorm.config.json");
-	if (!config) {
+function checkProjectConfig(report: EnvironmentReport): DoctorCheck {
+	if (!report.configs.projectConfigExists) {
 		return {
 			name: "project-config",
 			status: "ok",
 			message: "Project config: not found (optional)",
-			detail: `No brainstorm.config.json at ${path}`,
+			detail: `No brainstorm.config.json at ${report.configs.projectConfigPath}`,
 		};
 	}
+
 	return {
 		name: "project-config",
 		status: "ok",
-		message: `Project config: ${path}`,
+		message: `Project config: ${report.configs.projectConfigPath}`,
 	};
 }
 
-async function checkProviders(mergedConfig: BrainstormConfig | null): Promise<DoctorCheck[]> {
+function checkProviders(
+	report: EnvironmentReport,
+	mergedConfig: BrainstormConfig | null,
+): DoctorCheck[] {
 	const checks: DoctorCheck[] = [];
-	const platform = process.platform;
-	const providers = getProviders();
+	const policy = mergedConfig?.permissions?.defaultPolicy ?? "full";
 
-	for (const provider of providers) {
-		// Skip unsupported platforms
-		if (!provider.supportedPlatforms().includes(platform)) {
+	for (const provider of getProviders()) {
+		const providerState = report.providers[provider.name];
+
+		if (!providerState.supported) {
 			checks.push({
 				name: `provider:${provider.name}`,
 				status: "ok",
-				message: `${provider.label}  unsupported on ${platform}`,
+				message: `${provider.label} unsupported on ${process.platform}`,
 			});
 			continue;
 		}
 
-		// Resolve command live (not from cached config)
-		const resolved = await provider.resolveCommand();
-		if (!resolved) {
+		if (!providerState.installed || !providerState.resolved) {
 			checks.push({
 				name: `provider:${provider.name}`,
 				status: "fail",
-				message: `${provider.label}  not found`,
-				detail: provider.installInstructions(platform),
+				message: `${provider.label} not found`,
+				detail: providerState.installSpec?.summary,
 			});
 			continue;
 		}
 
-		// Run auth check live
-		let authStatus: string;
-		let authOk = false;
-		let authDetail: string | undefined;
-		try {
-			const authResult = await provider.checkAuth(resolved.path);
-			authOk = authResult.ok;
-			authStatus = authResult.ok ? "authenticated" : "auth failed";
-			if (!authResult.ok && authResult.error) {
-				authDetail = authResult.error;
-			}
-		} catch (err) {
-			authStatus = "BROKEN STARTUP";
-			authDetail = err instanceof Error ? err.message : String(err);
-		}
-
-		// Determine enabled/disabled from merged config
 		const agentState = mergedConfig?.agents?.[provider.name];
 		const enabled = agentState?.enabled ?? false;
-		const enabledStr = enabled ? "enabled" : "disabled";
-
-		// Get permission info
-		const policy = mergedConfig?.permissions?.defaultPolicy ?? "full";
 		const perms = provider.describePermissions(policy);
 		const permNote = perms.notes[0] ?? "";
-		const policyStr = `${policy} via ${permNote}`;
-
-		const status = authOk ? "ok" as const : "fail" as const;
-		const parts = [
-			padRight(provider.label, 10),
-			padRight(resolved.path, 40),
-			padRight(authStatus, 16),
-			padRight(enabledStr, 10),
-		];
-
-		if (authOk) {
-			parts.push(policyStr);
-		} else {
-			parts.push("\u2192 check runtime / version");
-		}
+		const authStatus = providerState.authenticated ? "authenticated" : "auth failed";
+		const enabledStatus = enabled ? "enabled" : "disabled";
+		const detail = providerState.authenticated
+			? undefined
+			: [providerState.authError, providerState.loginCommand && `Run ${providerState.loginCommand}`]
+				.filter(Boolean)
+				.join("; ");
 
 		checks.push({
 			name: `provider:${provider.name}`,
-			status,
-			message: parts.join(" ").trimEnd(),
-			detail: authDetail,
+			status: providerState.authenticated ? "ok" : "fail",
+			message: [
+				padRight(provider.label, 10),
+				padRight(providerState.resolved.path, 40),
+				padRight(authStatus, 16),
+				padRight(enabledStatus, 10),
+				providerState.authenticated ? `${policy} via ${permNote}` : "-> authenticate",
+			].join(" ").trimEnd(),
+			detail: detail || undefined,
 		});
 	}
 
 	return checks;
 }
 
-function padRight(str: string, width: number): string {
-	if (str.length >= width) return str;
-	return str + " ".repeat(width - str.length);
+function padRight(value: string, width: number): string {
+	if (value.length >= width) {
+		return value;
+	}
+
+	return value + " ".repeat(width - value.length);
 }
 
 function printHumanReadable(result: DoctorResult): void {
@@ -246,23 +200,13 @@ function printHumanReadable(result: DoctorResult): void {
 	lines.push("====================");
 	lines.push("");
 
-	const providerChecks: DoctorCheck[] = [];
-	const generalChecks: DoctorCheck[] = [];
+	const providerChecks = result.checks.filter((check) => check.name.startsWith("provider:"));
+	const generalChecks = result.checks.filter((check) => !check.name.startsWith("provider:"));
 
-	for (const check of result.checks) {
-		if (check.name.startsWith("provider:")) {
-			providerChecks.push(check);
-		} else {
-			generalChecks.push(check);
-		}
-	}
-
-	// General checks
 	for (const check of generalChecks) {
 		lines.push(formatCheck(check));
 	}
 
-	// Provider checks
 	if (providerChecks.length > 0) {
 		lines.push("");
 		lines.push("Agents:");
@@ -271,9 +215,8 @@ function printHumanReadable(result: DoctorResult): void {
 		}
 	}
 
-	// Summary
-	const failCount = result.checks.filter((c) => c.status === "fail").length;
-	const warnCount = result.checks.filter((c) => c.status === "warn").length;
+	const failCount = result.checks.filter((check) => check.status === "fail").length;
+	const warnCount = result.checks.filter((check) => check.status === "warn").length;
 
 	lines.push("");
 	if (failCount === 0 && warnCount === 0) {
@@ -294,6 +237,6 @@ function printHumanReadable(result: DoctorResult): void {
 }
 
 function formatCheck(check: DoctorCheck): string {
-	const icon = check.status === "ok" ? " \u2713" : check.status === "warn" ? " !" : " \u2717";
+	const icon = check.status === "ok" ? " ✓" : check.status === "warn" ? " !" : " ✗";
 	return `${icon} ${check.message}`;
 }

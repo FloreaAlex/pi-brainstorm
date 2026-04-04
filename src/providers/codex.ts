@@ -1,8 +1,15 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-import type { AgentUserConfig, AuthResult, Provider, ProviderPermissions, ResolvedCommand, SpawnConfig } from "./types.js";
+import type {
+	AgentUserConfig,
+	AuthResult,
+	Provider,
+	ProviderInstallSpec,
+	ProviderPermissions,
+	ResolveContext,
+	ResolvedCommand,
+	SpawnConfig,
+} from "./types.js";
 import { acpSmokeTest } from "./smoke-test.js";
-import { findOnPath } from "./resolve.js";
+import { findOnPath, resolveManagedCommand, resolvePackageCommand } from "./resolve.js";
 
 const COMMAND = "codex-acp";
 
@@ -22,31 +29,47 @@ export class CodexProvider implements Provider {
 		return ["darwin", "linux"];
 	}
 
-	async resolveCommand(): Promise<ResolvedCommand | null> {
-		// Check node_modules/.bin first
-		const nmBin = join("node_modules", ".bin", COMMAND);
-		if (existsSync(nmBin)) {
-			return { path: nmBin, source: "node_modules" };
+	async resolveCommand(context: ResolveContext): Promise<ResolvedCommand | null> {
+		const managed = resolveManagedCommand(COMMAND, context);
+		if (managed) {
+			return managed;
 		}
 
-		// Check PATH
-		try {
-			const resolved = findOnPath(COMMAND);
-			if (resolved) {
-				return { path: resolved, source: "path" };
-			}
-		} catch {
-			// not found on PATH
+		const nmBin = resolvePackageCommand(COMMAND, context);
+		if (nmBin) {
+			return nmBin;
+		}
+
+		const resolved = findOnPath(COMMAND);
+		if (resolved) {
+			return { path: resolved, source: "path" };
 		}
 
 		return null;
 	}
 
-	installInstructions(platform: NodeJS.Platform): string {
+	getInstallSpec(platform: NodeJS.Platform, _context: ResolveContext): ProviderInstallSpec {
 		if (platform === "darwin") {
-			return `brew install zed-industries/codex-acp`;
+			return {
+				kind: "brew",
+				summary: "brew install zed-industries/codex-acp",
+				command: "brew",
+				args: ["install", "zed-industries/codex-acp"],
+				autoInstallable: true,
+			};
 		}
-		return `See https://github.com/zed-industries/codex-acp for installation instructions.`;
+		return {
+			kind: "manual",
+			summary: "See https://github.com/zed-industries/codex-acp for installation instructions.",
+			autoInstallable: false,
+		};
+	}
+
+	getAuthCommand(_command: string): { command: string; args: string[] } {
+		return {
+			command: "codex",
+			args: ["auth"],
+		};
 	}
 
 	async checkAuth(command: string): Promise<AuthResult> {

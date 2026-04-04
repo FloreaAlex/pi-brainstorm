@@ -1,11 +1,15 @@
 #!/usr/bin/env node
 import { runSetup } from "./setup/wizard.js";
 import { runDoctor } from "./setup/doctor.js";
+import { runWizard } from "./setup/run-wizard.js";
 
 const command = process.argv[2];
 
 try {
 	switch (command) {
+		case "wizard":
+			await runWizard();
+			break;
 		case "setup":
 			await runSetup();
 			break;
@@ -18,10 +22,12 @@ try {
 			console.log("pi-brainstorm CLI");
 			console.log("");
 			console.log("Usage:");
+			console.log("  npm run wizard    Full provisioning flow");
 			console.log("  npm run setup     Setup extension, detect providers, write config");
 			console.log("  npm run doctor    Run diagnostics");
 			console.log("");
 			console.log("Or directly:");
+			console.log("  node dist/cli.js wizard");
 			console.log("  node dist/cli.js setup");
 			console.log("  node dist/cli.js doctor");
 			console.log("  node dist/cli.js doctor --json");
