@@ -1,3 +1,4 @@
 node_modules
 dist
 .superpowers
+.pi/brainstorm/state.json
