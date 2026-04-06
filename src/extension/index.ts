@@ -624,13 +624,18 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 		sessionUi = null;
 	}
 
+	// Safety net for unexpected exits — kill ACP subprocesses so they don't become orphans.
+	// Removed once session_shutdown fires to avoid double-cleanup.
+	const onExit = () => cleanup();
+	process.on("exit", onExit);
+	process.on("SIGINT", onExit);
+	process.on("SIGTERM", onExit);
+
 	api.on("session_shutdown", async () => {
+		process.removeListener("exit", onExit);
+		process.removeListener("SIGINT", onExit);
+		process.removeListener("SIGTERM", onExit);
 		cleanup();
 	});
-
-	// Handle unexpected exits — kill ACP subprocesses so they don't become orphans
-	process.on("exit", cleanup);
-	process.on("SIGINT", cleanup);
-	process.on("SIGTERM", cleanup);
 
 }
