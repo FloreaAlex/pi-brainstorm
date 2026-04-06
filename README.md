@@ -4,6 +4,8 @@ Multi-agent brainstorming extension for [pi](https://github.com/mariozechner/pi-
 
 ## How it works
 
+[Pi](https://github.com/mariozechner/pi-mono) is a terminal-based AI coding agent with an extension system. Extensions can add slash commands, render custom TUI components, and hook into pi's session and UI lifecycle. pi-brainstorm is a pi extension — it runs inside pi and uses pi's terminal UI to show agent conversations side by side.
+
 Each AI coding tool (Claude, Codex, Gemini) is a standalone CLI that speaks its own protocol. [ACP (Agent Client Protocol)](https://agentclientprotocol.com) is an open standard that gives them all a common interface — create sessions, send messages, stream responses, configure models. pi-brainstorm uses ACP to talk to all three agents the same way, without agent-specific code for each one.
 
 Each agent needs two things installed:
