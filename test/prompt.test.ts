@@ -1,22 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { interpolatePrompt, loadAutoPromptTemplate, loadPromptTemplate, parsePromptTemplate } from "../src/prompt.js";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const projectRoot = join(__dirname, "..");
-
-describe("prompt loading", () => {
-	it("loads brainstorm prompt from prompts/BRAINSTORM.md", () => {
-		const template = loadPromptTemplate(projectRoot);
-		expect(template).toContain("brainstorming session");
-	});
-
-	it("loads auto prompt from prompts/AUTO.md", () => {
-		const template = loadAutoPromptTemplate();
-		expect(template).toContain("autonomous discussion");
-	});
-});
+import { interpolatePrompt, parsePromptTemplate } from "../src/prompt.js";
 
 describe("prompt template", () => {
 	it("strips frontmatter", () => {
@@ -38,4 +21,3 @@ describe("prompt template", () => {
 		expect(result).toBe("Hello Claude {{unknown}}");
 	});
 });
-

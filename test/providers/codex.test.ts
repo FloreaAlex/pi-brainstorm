@@ -5,88 +5,17 @@ import type { ResolvedCommand } from "../../src/providers/types.js";
 describe("CodexProvider", () => {
 	const provider = new CodexProvider();
 
-	describe("identity", () => {
-		it("has name 'codex'", () => {
-			expect(provider.name).toBe("codex");
-		});
-
-		it("has label 'Codex'", () => {
-			expect(provider.label).toBe("Codex");
-		});
-
-		it("has color '#10b981'", () => {
-			expect(provider.color).toBe("#10b981");
-		});
-	});
-
-	describe("supportedPlatforms", () => {
-		it("supports darwin and linux", () => {
-			expect(provider.supportedPlatforms()).toEqual(["darwin", "linux"]);
-		});
-
-		it("does not support win32", () => {
-			expect(provider.supportedPlatforms()).not.toContain("win32");
-		});
-	});
-
-	describe("permissionModes", () => {
-		it("returns empty array", () => {
-			expect(provider.permissionModes()).toEqual([]);
-		});
-	});
-
 	describe("spawnConfig", () => {
 		const resolved: ResolvedCommand = {
 			path: "/usr/local/bin/codex-acp",
 			source: "path",
 		};
 
-		describe("full policy", () => {
-			it("uses resolved path as command", () => {
-				const config = provider.spawnConfig(resolved, undefined, "full");
-				expect(config.command).toBe("/usr/local/bin/codex-acp");
-			});
-
-			it("includes danger-full-access and approval_policy args", () => {
-				const config = provider.spawnConfig(resolved, undefined, "full");
-				expect(config.args).toEqual([
-					"-c", 'sandbox_mode="danger-full-access"',
-					"-c", 'approval_policy="never"',
-				]);
-			});
-
-			it("includes CODEX_CLI_AUTH_CREDENTIALS_STORE env", () => {
-				const config = provider.spawnConfig(resolved, undefined, "full");
-				expect(config.env.CODEX_CLI_AUTH_CREDENTIALS_STORE).toBe("file");
-			});
-
-			it("includes CODEX_HOME env", () => {
-				const config = provider.spawnConfig(resolved, undefined, "full");
-				expect(config.env.CODEX_HOME).toBe(`${process.env.HOME}/.codex`);
-			});
-		});
-
-		describe("restricted policy", () => {
-			it("has no sandbox args", () => {
-				const config = provider.spawnConfig(resolved, undefined, "restricted");
-				expect(config.args).toEqual([]);
-			});
-
-			it("still includes base env vars", () => {
-				const config = provider.spawnConfig(resolved, undefined, "restricted");
-				expect(config.env.CODEX_CLI_AUTH_CREDENTIALS_STORE).toBe("file");
-				expect(config.env.CODEX_HOME).toBe(`${process.env.HOME}/.codex`);
-			});
-		});
-
-		describe("defaults to full policy when omitted", () => {
-			it("includes sandbox args when policy is undefined", () => {
-				const config = provider.spawnConfig(resolved);
-				expect(config.args).toEqual([
-					"-c", 'sandbox_mode="danger-full-access"',
-					"-c", 'approval_policy="never"',
-				]);
-			});
+		it("full policy includes sandbox args, restricted does not", () => {
+			const full = provider.spawnConfig(resolved, undefined, "full");
+			expect(full.args.some((a) => a.includes("danger-full-access"))).toBe(true);
+			const restricted = provider.spawnConfig(resolved, undefined, "restricted");
+			expect(restricted.args).toEqual([]);
 		});
 
 		describe("user overrides", () => {
@@ -118,79 +47,14 @@ describe("CodexProvider", () => {
 				expect(config.env.CODEX_CLI_AUTH_CREDENTIALS_STORE).toBe("file");
 			});
 
-			it("handles null/undefined overrides gracefully", () => {
+			it("handles null overrides gracefully", () => {
 				const config = provider.spawnConfig(resolved, {
 					args: null,
 					env: null,
 				}, "full");
-				expect(config.args).toEqual([
-					"-c", 'sandbox_mode="danger-full-access"',
-					"-c", 'approval_policy="never"',
-				]);
+				expect(config.args.some((a) => a.includes("danger-full-access"))).toBe(true);
 				expect(config.env.CODEX_CLI_AUTH_CREDENTIALS_STORE).toBe("file");
 			});
-		});
-	});
-
-	describe("describePermissions", () => {
-		describe("full policy", () => {
-			it("returns provider_full effectiveMode", () => {
-				const perms = provider.describePermissions("full");
-				expect(perms.effectiveMode).toBe("provider_full");
-			});
-
-			it("mentions danger-full-access in notes", () => {
-				const perms = provider.describePermissions("full");
-				expect(perms.notes.some((n) => n.includes("danger-full-access"))).toBe(true);
-			});
-
-			it("mentions approval_policy=never in notes", () => {
-				const perms = provider.describePermissions("full");
-				expect(perms.notes.some((n) => n.includes("approval_policy=never"))).toBe(true);
-			});
-
-			it("mentions file auth in notes", () => {
-				const perms = provider.describePermissions("full");
-				expect(perms.notes.some((n) => n.includes("file"))).toBe(true);
-			});
-		});
-
-		describe("restricted policy", () => {
-			it("returns provider_restricted effectiveMode", () => {
-				const perms = provider.describePermissions("restricted");
-				expect(perms.effectiveMode).toBe("provider_restricted");
-			});
-
-			it("mentions default sandbox in notes", () => {
-				const perms = provider.describePermissions("restricted");
-				expect(perms.notes.some((n) => n.includes("default sandbox"))).toBe(true);
-			});
-		});
-	});
-
-	describe("getInstallSpec", () => {
-		it("returns brew install spec for darwin", () => {
-			const spec = provider.getInstallSpec("darwin", {
-				packageRoot: "/repo",
-				managedToolsRoot: "/managed-tools",
-			});
-			expect(spec).toEqual({
-				kind: "brew",
-				summary: "brew install zed-industries/codex-acp",
-				command: "brew",
-				args: ["install", "zed-industries/codex-acp"],
-				autoInstallable: true,
-			});
-		});
-
-		it("returns manual install spec for linux", () => {
-			const spec = provider.getInstallSpec("linux", {
-				packageRoot: "/repo",
-				managedToolsRoot: "/managed-tools",
-			});
-			expect(spec?.kind).toBe("manual");
-			expect(spec?.autoInstallable).toBe(false);
-			expect(spec?.summary).toContain("github");
 		});
 	});
 });

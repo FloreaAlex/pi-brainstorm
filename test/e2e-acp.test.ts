@@ -26,6 +26,7 @@ const {
 
 vi.mock("../src/setup/environment.js", () => ({
 	PACKAGE_ROOT: "/repo",
+	MANAGED_TOOLS_ROOT: "/mock/managed/tools",
 	scanEnvironment: scanEnvironmentMock,
 }));
 
@@ -74,7 +75,7 @@ describe("runWizard orchestration", () => {
 		});
 
 		const prompter = {
-			ask: vi.fn(),
+			ask: vi.fn().mockResolvedValue("n"),
 			pause: vi.fn(),
 			resume: vi.fn(),
 			close: vi.fn(),
@@ -117,7 +118,7 @@ describe("runWizard orchestration", () => {
 					resolved: { path: "/bin/gemini", source: "managed" as const },
 					installed: true,
 					authenticated: false,
-					loginCommand: "gemini auth",
+					loginCommand: "gemini",
 				},
 			},
 		};
@@ -155,7 +156,7 @@ describe("runWizard orchestration", () => {
 			})
 			.mockReturnValueOnce({
 				install: [],
-				auth: [{ name: "gemini", label: "Gemini", loginCommand: "gemini auth", authCommand: { command: "gemini", args: ["auth"] } }],
+				auth: [{ name: "gemini", label: "Gemini", loginCommand: "gemini", authCommand: { command: "gemini", args: [] } }],
 				ready: [],
 				unsupported: [],
 				manual: [],
@@ -179,6 +180,8 @@ describe("runWizard orchestration", () => {
 			{
 				name: "gemini",
 				label: "Gemini",
+				supportedPlatforms: () => [process.platform],
+				getCliDependency: () => null,
 				describePermissions: () => ({ notes: ["yolo"] }),
 			},
 		]);

@@ -1,6 +1,7 @@
 import type {
 	AgentUserConfig,
 	AuthResult,
+	CliDependency,
 	Provider,
 	ProviderInstallSpec,
 	ProviderPermissions,
@@ -52,9 +53,9 @@ export class CodexProvider implements Provider {
 		if (platform === "darwin") {
 			return {
 				kind: "brew",
-				summary: "brew install zed-industries/codex-acp",
+				summary: "brew install codex-acp",
 				command: "brew",
-				args: ["install", "zed-industries/codex-acp"],
+				args: ["install", "codex-acp"],
 				autoInstallable: true,
 			};
 		}
@@ -65,10 +66,24 @@ export class CodexProvider implements Provider {
 		};
 	}
 
+	getCliDependency(): CliDependency {
+		return {
+			command: "codex",
+			label: "Codex CLI",
+			installSpec: {
+				kind: "brew",
+				summary: "brew install codex",
+				command: "brew",
+				args: ["install", "codex"],
+				autoInstallable: true,
+			},
+		};
+	}
+
 	getAuthCommand(_command: string): { command: string; args: string[] } {
 		return {
 			command: "codex",
-			args: ["auth"],
+			args: ["login"],
 		};
 	}
 
@@ -83,7 +98,7 @@ export class CodexProvider implements Provider {
 			ok: result.ok,
 			checkedAt: new Date().toISOString(),
 			error: result.error,
-			loginCommand: "codex auth",
+			loginCommand: "codex login",
 		};
 	}
 

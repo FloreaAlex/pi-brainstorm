@@ -35,7 +35,7 @@ function makeReport(overrides?: Partial<EnvironmentReport>): EnvironmentReport {
 				installed: true,
 				authenticated: false,
 				authError: "login required",
-				loginCommand: "codex auth",
+				loginCommand: "codex login",
 			},
 			gemini: {
 				supported: false,

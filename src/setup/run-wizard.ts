@@ -10,7 +10,9 @@ import {
 	buildMachineConfig,
 	type ProviderSelection,
 } from "./primitives.js";
-import { determineActions, promptAndInstall, runAuth, type ProvisionResult } from "../installer/index.js";
+import { determineActions, promptAndInstall, runAuth, runInstall, type ProvisionResult } from "../installer/index.js";
+import { findOnPath } from "../providers/resolve.js";
+import type { CliDependency } from "../providers/types.js";
 
 function log(msg: string): void {
 	console.log(msg);
@@ -59,7 +61,7 @@ export async function runWizard(): Promise<void> {
 	if (report.extension.symlinked && report.extension.targetOk) {
 		log(`  \u2713 Symlinked at ${report.extension.symlinkPath}`);
 	} else {
-		log(`  \u2717 Not symlinked (will be created in Phase 5)`);
+		log(`  \u2717 Not symlinked (will be set up later)`);
 	}
 
 	log("");
@@ -70,54 +72,81 @@ export async function runWizard(): Promise<void> {
 
 	if (!report.prerequisites.pi.ok) {
 		log("\u2717 Pi is not installed.");
-		log("  Install Pi first: https://github.com/mariozechner/pi-mono");
+		log("  Install Pi first: npm install -g @mariozechner/pi-coding-agent");
 		log("  Then re-run: npm run wizard");
 		process.exit(1);
 	}
 
-	// Phase 3: provider install selection
-	const actions = determineActions(report);
-
-	if (actions.ready.length > 0) {
-		log("Ready:");
-		for (const { label } of actions.ready) {
-			log(`  \u2713 ${label} (installed and authenticated)`);
-		}
-		log("");
-	}
-
-	if (actions.unsupported.length > 0) {
-		log("Unsupported on this platform:");
-		for (const { label } of actions.unsupported) {
-			log(`  - ${label}`);
-		}
-		log("");
-	}
-
-	if (actions.manual.length > 0) {
-		log("Requires manual installation:");
-		for (const { label, summary } of actions.manual) {
-			log(`  - ${label}: ${summary}`);
-		}
-		log("");
+	// Phase 3: install CLI tools globally (claude, codex)
+	const missingClis: Array<{ provider: string; dep: CliDependency }> = [];
+	for (const provider of getProviders()) {
+		if (!provider.supportedPlatforms().includes(process.platform)) continue;
+		const dep = provider.getCliDependency();
+		if (!dep) continue;
+		if (findOnPath(dep.command)) continue;
+		missingClis.push({ provider: provider.name, dep });
 	}
 
 	const prompter = createPrompter();
 	let installResults: ProvisionResult[] = [];
 
 	try {
+		if (missingClis.length > 0) {
+			log("CLI tools:");
+			for (const { dep } of missingClis) {
+				const answer = await prompter.ask(`  Install ${dep.label}? (${dep.installSpec.summary}) [Y/n] `);
+				if (answer.toLowerCase() === "n" || answer.toLowerCase() === "no") {
+					log(`  - ${dep.label} skipped`);
+					continue;
+				}
+				log(`  Installing ${dep.label} globally...`);
+				const result = runInstall(dep.installSpec);
+				if (result.ok) {
+					log(`  \u2713 ${dep.label} installed`);
+				} else {
+					log(`  \u2717 ${dep.label} failed: ${result.error}`);
+				}
+			}
+			log("");
+		}
+
+		// Phase 4: install ACP bridges globally
+		const actions = determineActions(report);
+
+		if (actions.ready.length > 0) {
+			log("Ready:");
+			for (const { label } of actions.ready) {
+				log(`  \u2713 ${label} (installed and authenticated)`);
+			}
+			log("");
+		}
+
+		if (actions.unsupported.length > 0) {
+			log("Unsupported on this platform:");
+			for (const { label } of actions.unsupported) {
+				log(`  - ${label}`);
+			}
+			log("");
+		}
+
+		if (actions.manual.length > 0) {
+			log("Requires manual installation:");
+			for (const { label, summary } of actions.manual) {
+				log(`  - ${label}: ${summary}`);
+			}
+			log("");
+		}
+
 		if (actions.install.length > 0) {
-			log("Available for installation:");
+			log("ACP bridges:");
 			installResults = await promptAndInstall(actions.install, prompter, log);
 			log("");
 		}
 
-		// Phase 4: interactive auth
-		// After installs, re-scan to pick up newly installed providers that need auth
+		// Phase 5: interactive auth
 		if (installResults.some((r) => r.action === "installed")) {
 			log("Re-scanning after installations...");
 			report = await scanEnvironment({ packageRoot: PACKAGE_ROOT });
-			// Recalculate auth needs based on fresh scan
 			const freshActions = determineActions(report);
 			if (freshActions.auth.length > 0) {
 				const authResults = runAuth(freshActions.auth, prompter, log);
@@ -135,7 +164,7 @@ export async function runWizard(): Promise<void> {
 			log("");
 		}
 
-		// Phase 5: extension and machine config
+		// Phase 6: extension and machine config
 		log("Setting up extension...");
 		try {
 			ensureExtensionSymlink(PACKAGE_ROOT);
@@ -148,19 +177,14 @@ export async function runWizard(): Promise<void> {
 
 		const policy = await promptPermissionPolicy(prompter);
 
-		// Phase 6: final verification — re-scan from live state
+		// Phase 7: final verification
 		log("");
 		log("Final verification...");
 		report = await scanEnvironment({ packageRoot: PACKAGE_ROOT });
 
-		// Build selections from live state, not from attempted actions alone.
-		// Failed auth should keep an installed provider in config as disabled,
-		// while skipped/failed installs should be omitted entirely.
 		const selections = buildSelectionsFromProvisionResults(report, installResults);
-
 		const config = buildMachineConfig(report, policy, selections);
 
-		// Show policy per enabled agent
 		for (const provider of getProviders()) {
 			const agentState = config.agents[provider.name];
 			if (!agentState?.enabled) continue;

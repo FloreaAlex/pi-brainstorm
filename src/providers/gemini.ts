@@ -1,6 +1,7 @@
 import type {
 	AgentUserConfig,
 	AuthResult,
+	CliDependency,
 	Provider,
 	ProviderInstallSpec,
 	ProviderPermissions,
@@ -41,20 +42,25 @@ export class GeminiProvider implements Provider {
 		return null;
 	}
 
-	getInstallSpec(_platform: NodeJS.Platform, context: ResolveContext): ProviderInstallSpec {
+	getInstallSpec(_platform: NodeJS.Platform, _context: ResolveContext): ProviderInstallSpec {
 		return {
 			kind: "npm",
-			summary: `npm install --prefix ${context.managedToolsRoot} @google/gemini-cli`,
+			summary: "npm install -g @google/gemini-cli",
 			command: "npm",
-			args: ["install", "--prefix", context.managedToolsRoot, "@google/gemini-cli"],
+			args: ["install", "-g", "@google/gemini-cli"],
 			autoInstallable: true,
 		};
 	}
 
+	getCliDependency(): CliDependency | null {
+		return null; // gemini CLI is the ACP bridge — no separate dependency
+	}
+
 	getAuthCommand(_command: string): { command: string; args: string[] } {
+		// Gemini has no dedicated auth command — it authenticates via browser on first interactive run
 		return {
 			command: "gemini",
-			args: ["auth"],
+			args: [],
 		};
 	}
 
@@ -70,7 +76,7 @@ export class GeminiProvider implements Provider {
 			ok: result.ok,
 			checkedAt,
 			error: result.error,
-			loginCommand: "gemini auth",
+			loginCommand: "gemini (authenticates on first run)",
 		};
 	}
 

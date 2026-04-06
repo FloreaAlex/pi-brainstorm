@@ -33,6 +33,7 @@ try {
 			console.log("  node dist/cli.js doctor --json");
 			process.exit(command ? 1 : 0);
 	}
+	process.exit(0);
 } catch (err) {
 	console.error(err instanceof Error ? err.message : String(err));
 	process.exit(1);

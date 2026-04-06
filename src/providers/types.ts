@@ -79,6 +79,12 @@ export interface BrainstormConfig {
 	};
 }
 
+export interface CliDependency {
+	command: string;
+	label: string;
+	installSpec: ProviderInstallSpec;
+}
+
 export interface Provider {
 	name: string;
 	label: string;
@@ -86,6 +92,7 @@ export interface Provider {
 	supportedPlatforms(): NodeJS.Platform[];
 	resolveCommand(context: ResolveContext): Promise<ResolvedCommand | null>;
 	getInstallSpec(platform: NodeJS.Platform, context: ResolveContext): ProviderInstallSpec | null;
+	getCliDependency(): CliDependency | null;
 	getAuthCommand(command: string): ProviderAuthCommand;
 	checkAuth(command: string): Promise<AuthResult>;
 	spawnConfig(

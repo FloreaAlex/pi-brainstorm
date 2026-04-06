@@ -45,7 +45,7 @@ function makeReport(): EnvironmentReport {
 				installed: true,
 				authenticated: false,
 				authError: "login required",
-				loginCommand: "codex auth",
+				loginCommand: "codex login",
 			},
 			gemini: {
 				supported: true,
@@ -69,10 +69,10 @@ describe("determineActions", () => {
 		const codex = actions.auth.find((entry) => entry.name === "codex");
 
 		expect(codex).toBeDefined();
-		expect(codex?.loginCommand).toBe("codex auth");
+		expect(codex?.loginCommand).toBe("codex login");
 		expect(codex?.authCommand).toEqual({
 			command: "codex",
-			args: ["auth"],
+			args: ["login"],
 		});
 	});
 });
@@ -96,7 +96,7 @@ describe("runAuth", () => {
 			{
 				name: "codex",
 				label: "Codex",
-				loginCommand: 'codex auth --profile "Team A"',
+				loginCommand: 'codex login --profile "Team A"',
 				authCommand: {
 					command: "codex",
 					args: ["auth", "--profile", "Team A"],

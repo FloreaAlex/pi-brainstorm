@@ -123,6 +123,21 @@ export class AgentManager {
 							if (content.type === "text") {
 								this.emitStream({ agentName, text: content.text, done: false, kind: "thought" });
 							}
+						} else if (update.sessionUpdate === "config_option_update") {
+							// ACP source of truth — update session info from confirmed config
+							const opts = ((update as any).configOptions ?? []) as any[];
+							for (const opt of opts) {
+								if (!state.sessionInfo) state.sessionInfo = {};
+								if (opt.category === "model" && opt.currentValue) {
+									state.sessionInfo.model = opt.currentValue;
+								} else if (opt.category === "thought_level" && opt.currentValue) {
+									state.sessionInfo.thoughtLevel = opt.currentValue;
+								} else if ((opt.category === "context_window" || opt.id === "context_window") && opt.currentValue) {
+									state.sessionInfo.contextWindow = typeof opt.currentValue === "number"
+										? opt.currentValue
+										: parseInt(opt.currentValue, 10) || undefined;
+								}
+							}
 						}
 					},
 				}),
@@ -174,22 +189,26 @@ export class AgentManager {
 				// Config option not supported
 			}
 
-			// Track actual values set (not stale snapshot from newSession)
 			state.sessionInfo = {};
 
-			// Read initial values from session snapshot
-			const configOpts = (session.configOptions ?? []) as any[];
-			for (const opt of configOpts) {
-				if (opt.category === "model" && opt.currentValue) {
-					state.sessionInfo.model = opt.currentValue;
-				} else if (opt.category === "thought_level" && opt.currentValue) {
-					state.sessionInfo.thoughtLevel = opt.currentValue;
-				} else if ((opt.category === "context_window" || opt.id === "context_window") && opt.currentValue) {
-					state.sessionInfo.contextWindow = typeof opt.currentValue === "number"
-						? opt.currentValue
-						: parseInt(opt.currentValue, 10) || undefined;
+			// Helper: read confirmed values from ACP config options
+			function updateSessionInfoFromOpts(opts: any[]): void {
+				for (const opt of opts) {
+					if (opt.category === "model" && opt.currentValue) {
+						state.sessionInfo!.model = opt.currentValue;
+					} else if (opt.category === "thought_level" && opt.currentValue) {
+						state.sessionInfo!.thoughtLevel = opt.currentValue;
+					} else if ((opt.category === "context_window" || opt.id === "context_window") && opt.currentValue) {
+						state.sessionInfo!.contextWindow = typeof opt.currentValue === "number"
+							? opt.currentValue
+							: parseInt(opt.currentValue, 10) || undefined;
+					}
 				}
 			}
+
+			// Read initial values from session snapshot
+			let configOpts = (session.configOptions ?? []) as any[];
+			updateSessionInfoFromOpts(configOpts);
 
 			// Set highest reasoning/thinking level — brainstorming benefits from max effort
 			try {
@@ -202,14 +221,17 @@ export class AgentManager {
 					if (flat.length > 0) {
 						const highest = flat[flat.length - 1];
 						if (highest.value !== thoughtOption.currentValue) {
-							await connection.setSessionConfigOption({
+							const resp = await connection.setSessionConfigOption({
 								sessionId: session.sessionId,
 								configId: thoughtOption.id,
 								value: highest.value,
 							});
+							// Response has confirmed config — update from ACP source of truth
+							if (resp.configOptions) {
+								configOpts = resp.configOptions as any[];
+								updateSessionInfoFromOpts(configOpts);
+							}
 						}
-						// Track what we actually set
-						state.sessionInfo.thoughtLevel = highest.value;
 					}
 				}
 			} catch {
@@ -232,14 +254,19 @@ export class AgentManager {
 						);
 						if (match) {
 							if (match.value !== modelOption.currentValue) {
-								await connection.setSessionConfigOption({
+								const resp = await connection.setSessionConfigOption({
 									sessionId: session.sessionId,
 									configId: modelOption.id,
 									value: match.value,
 								});
+								if (resp.configOptions) {
+									configOpts = resp.configOptions as any[];
+									updateSessionInfoFromOpts(configOpts);
+								}
+							} else {
+								// Already the right model — trust what ACP told us
+								state.sessionInfo.model = modelOption.currentValue;
 							}
-							// Track what we actually set (or confirmed)
-							state.sessionInfo.model = match.value;
 						}
 					}
 				} catch {

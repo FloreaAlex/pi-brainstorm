@@ -82,11 +82,10 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 			const info = state?.sessionInfo;
 			const nameStr = color ? chalk.hex(color)(n) : n;
 
-			// Show actual model and thinking level from ACP session
-			const model = info?.model ?? state?.config.preferredModel;
+			// Show only what ACP actually reports — config values are wishes, not reality
 			const parts = [nameStr];
-			if (model) {
-				const short = model.replace(/^claude-/, "").replace(/^gemini-/, "").replace(/^gpt-/, "");
+			if (info?.model) {
+				const short = info.model.replace(/^claude-/, "").replace(/^gemini-/, "").replace(/^gpt-/, "");
 				parts.push(chalk.dim(short));
 			}
 			if (info?.thoughtLevel) {

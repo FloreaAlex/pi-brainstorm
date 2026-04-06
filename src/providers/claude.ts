@@ -1,6 +1,7 @@
 import type {
 	AgentUserConfig,
 	AuthResult,
+	CliDependency,
 	Provider,
 	ProviderInstallSpec,
 	ProviderPermissions,
@@ -54,13 +55,27 @@ export class ClaudeProvider implements Provider {
 		return null;
 	}
 
-	getInstallSpec(_platform: NodeJS.Platform, context: ResolveContext): ProviderInstallSpec {
+	getInstallSpec(_platform: NodeJS.Platform, _context: ResolveContext): ProviderInstallSpec {
 		return {
 			kind: "npm",
-			summary: `npm install --prefix ${context.managedToolsRoot} @agentclientprotocol/claude-agent-acp`,
+			summary: "npm install -g @agentclientprotocol/claude-agent-acp",
 			command: "npm",
-			args: ["install", "--prefix", context.managedToolsRoot, "@agentclientprotocol/claude-agent-acp"],
+			args: ["install", "-g", "@agentclientprotocol/claude-agent-acp"],
 			autoInstallable: true,
+		};
+	}
+
+	getCliDependency(): CliDependency {
+		return {
+			command: "claude",
+			label: "Claude Code",
+			installSpec: {
+				kind: "npm",
+				summary: "npm install -g @anthropic-ai/claude-code",
+				command: "npm",
+				args: ["install", "-g", "@anthropic-ai/claude-code"],
+				autoInstallable: true,
+			},
 		};
 	}
 
