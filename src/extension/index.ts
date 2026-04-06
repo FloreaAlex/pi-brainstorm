@@ -624,30 +624,9 @@ export default function brainstormExtension(api: ExtensionAPI): void {
 		sessionUi = null;
 	}
 
-	// Kill ACP subprocesses on unexpected exit so they don't become orphans.
-	// `exit` is the last-resort hook — always runs, can't be removed too early.
-	// SIGINT/SIGTERM must re-raise after cleanup so the process actually terminates.
-	let cleanedUp = false;
-	function cleanupOnce(): void {
-		if (cleanedUp) return;
-		cleanedUp = true;
-		cleanup();
-	}
-
-	process.on("exit", cleanupOnce);
-
-	function onSignal(signal: NodeJS.Signals): void {
-		cleanupOnce();
-		// Re-raise so the process actually exits
-		process.kill(process.pid, signal);
-	}
-	process.on("SIGINT", onSignal);
-	process.on("SIGTERM", onSignal);
-
+	// Pi owns the process lifecycle. Extensions clean up via session_shutdown.
 	api.on("session_shutdown", async () => {
-		cleanupOnce();
-		process.removeListener("SIGINT", onSignal);
-		process.removeListener("SIGTERM", onSignal);
+		cleanup();
 	});
 
 }
